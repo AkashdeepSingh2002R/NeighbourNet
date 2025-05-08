@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+.cloudy-bg {
+    background-image: url('/images/wp289432.webp');
+  }
+  .sunny-bg {
+    background-image: url('/images/sunny.jpeg');
+  }
+  .rainy-bg {
+    background-image: url('/images/rainy.jpeg');
+  }
+  .snowy-bg {
+    background-image: url('/images/snowy.webp');
+  }
+  .default-bg {
+    background-color: #f1f3ec;
+  }
+  
+  
