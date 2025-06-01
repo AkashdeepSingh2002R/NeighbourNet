@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const dotenv = require("dotenv");
-const userRoutes = require("./routes/user");
+const userRoutes = require("./routes/userroutes");
 
 dotenv.config();
 
