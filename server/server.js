@@ -4,7 +4,11 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const dotenv = require("dotenv");
-const userRoutes = require("./routes/userroutes");
+
+const userRoutes = require("./routes/userRoutes"); // ✅ match your folder exactly
+const postRoutes = require("./routes/postRoutes");
+const communityRoutes = require("./routes/communityRoutes");
+const communityPostRoutes = require("./routes/communityPostRoutes");
 
 dotenv.config();
 
@@ -12,14 +16,15 @@ const app = express();
 
 app.use(express.json());
 
-// CORS FIX: Allow frontend domain and credentials
+// ✅ Allow Netlify frontend + cookies
 app.use(
   cors({
-    origin: "https://remarkable-pithivier-c497c5.netlify.app", // your Netlify frontend
+    origin: "https://remarkable-pithivier-c497c5.netlify.app",
     credentials: true,
   })
 );
-// SESSION FIX: Secure cookie for cross-origin
+
+// ✅ Secure session for cookies to work on mobile
 app.use(
   session({
     secret: "neighbournetsecret",
@@ -29,28 +34,30 @@ app.use(
       mongoUrl: process.env.MONGO_URL,
     }),
     cookie: {
-      secure: true,         // ⬅️ important for HTTPS
-      sameSite: "None",     // ⬅️ required for cross-site cookies
+      secure: true,        // 🔒 Required for HTTPS (mobile devices)
+      sameSite: "None",    // 🔄 Required for cross-origin cookies
     },
   })
 );
 
-
-// Connect to MongoDB
+// ✅ Connect MongoDB
 mongoose
   .connect(process.env.MONGO_URL, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
   .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+  .catch((err) => console.error("MongoDB error:", err));
 
-// Routes
-app.use("/api/user", userRoutes);
+// ✅ All Routes
+app.use("/api/users", userRoutes);
+app.use("/api/posts", postRoutes);
+app.use("/api/communities", communityRoutes);
+app.use("/api/community-posts", communityPostRoutes);
 
-// Test Route
-app.get("/test", (req, res) => {
-  res.json({ msg: "Backend reachable" });
+// ✅ Optional test route
+app.get("/", (req, res) => {
+  res.send("NeighbourNet backend is live 🚀");
 });
 
 const PORT = process.env.PORT || 5000;
