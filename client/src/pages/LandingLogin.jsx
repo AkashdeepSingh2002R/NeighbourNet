@@ -8,7 +8,7 @@ import c3 from '../assets/c3.jpg';
 import axios from 'axios';
 
 export default function LandingLogin({ onLogin }) {
-  const navigate = useNavigate();
+   const navigate = useNavigate();
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -29,29 +29,24 @@ export default function LandingLogin({ onLogin }) {
 
     try {
       if (isSignup) {
-        const res = await axios.post('http://localhost:5000/api/users/register', {
-          name: form.name.trim(),
-          email: trimmedEmail,
-          password: trimmedPassword,
-          city: form.city.trim(),
-          postalCode: form.postalCode.trim()
-        });
-
-        localStorage.setItem('user', JSON.stringify(res.data));
-        onLogin(res.data);
-        navigate('/home');
+        const res = await axios.post("/signup", form);
+        if (res.data.success) {
+          onLogin(res.data.user);
+          navigate("/welcome");
+        }
       } else {
-        const res = await axios.post('http://localhost:5000/api/users/login', {
+        const res = await axios.post("/login", {
           email: trimmedEmail,
           password: trimmedPassword,
         });
-
-        localStorage.setItem('user', JSON.stringify(res.data));
-        onLogin(res.data);
-        navigate('/home');
+        if (res.data.success) {
+          onLogin(res.data.user);
+          navigate("/welcome");
+        }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Something went wrong');
+      console.error("Login error:", err);
+      setError("Something went wrong. Try again.");
     }
   };
 
