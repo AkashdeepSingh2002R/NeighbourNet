@@ -4,7 +4,6 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const dotenv = require("dotenv");
-const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
 
 dotenv.config();
@@ -47,7 +46,6 @@ mongoose
   .catch((err) => console.error("MongoDB connection error:", err));
 
 // Routes
-app.use("/api", authRoutes);
 app.use("/api/users", userRoutes);
 
 // Test Route
