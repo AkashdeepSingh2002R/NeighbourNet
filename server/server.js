@@ -4,13 +4,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-
-// ✅ Fixed CORS for Render + iPhone/Safari
-app.use(cors({
-  origin: "https://neighbournet-frontend.onrender.com",
-  credentials: true
-}));
-
+app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
