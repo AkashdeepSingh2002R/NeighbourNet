@@ -5,10 +5,10 @@ import { FaUserCircle } from 'react-icons/fa';
 import c1 from '../assets/c1.webp';
 import c2 from '../assets/c2.jpeg';
 import c3 from '../assets/c3.jpg';
-import axios from 'axios';
+import axios from '../api/axios'; // ✅ FIXED: use shared axios instance
 
 export default function LandingLogin({ onLogin }) {
-   const navigate = useNavigate();
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -26,27 +26,32 @@ export default function LandingLogin({ onLogin }) {
     e.preventDefault();
     const trimmedEmail = form.email.trim();
     const trimmedPassword = form.password.trim();
+    setError('');
 
     try {
       if (isSignup) {
-        const res = await axios.post("/signup", form);
+        const res = await axios.post('/signup', form);
         if (res.data.success) {
           onLogin(res.data.user);
-          navigate("/welcome");
+          navigate('/welcome');
+        } else {
+          setError(res.data.message || 'Signup failed.');
         }
       } else {
-        const res = await axios.post("/login", {
+        const res = await axios.post('/login', {
           email: trimmedEmail,
           password: trimmedPassword,
         });
         if (res.data.success) {
           onLogin(res.data.user);
-          navigate("/welcome");
+          navigate('/welcome');
+        } else {
+          setError(res.data.message || 'Login failed.');
         }
       }
     } catch (err) {
-      console.error("Login error:", err);
-      setError("Something went wrong. Try again.");
+      console.error('Login error:', err);
+      setError('Something went wrong. Try again.');
     }
   };
 

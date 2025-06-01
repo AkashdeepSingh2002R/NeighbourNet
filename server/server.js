@@ -16,11 +16,10 @@ app.use(express.json());
 // CORS FIX: Allow frontend domain and credentials
 app.use(
   cors({
-    origin: "https://remarkable-pithivier-c497c5.netlify.app",
+    origin: "https://remarkable-pithivier-c497c5.netlify.app", // your Netlify frontend
     credentials: true,
   })
 );
-
 // SESSION FIX: Secure cookie for cross-origin
 app.use(
   session({
@@ -31,11 +30,12 @@ app.use(
       mongoUrl: process.env.MONGO_URL,
     }),
     cookie: {
-      secure: true,           // required for HTTPS
-      sameSite: "None",       // allow cross-site cookies
+      secure: true,         // ⬅️ important for HTTPS
+      sameSite: "None",     // ⬅️ required for cross-site cookies
     },
   })
 );
+
 
 // Connect to MongoDB
 mongoose
