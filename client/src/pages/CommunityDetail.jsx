@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api from '../api/axios';
+import axios from 'axios';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -13,15 +13,15 @@ export default function CommunityDetail() {
   const user = JSON.parse(localStorage.getItem('user'));
 
   useEffect(() => {
-    api.get(`/api/communities/${id}`)
-      .then((res) => setCommunity(res.data))
-      .catch((err) => {
+    axios.get(`http://localhost:5000/api/communities/${id}`)
+      .then(res => setCommunity(res.data))
+      .catch(err => {
         console.error('Community not found:', err);
         setCommunity(null);
       });
 
-    api.get(`/api/community-posts/${id}`)
-      .then((res) => setPosts(res.data))
+    axios.get(`http://localhost:5000/api/community-posts/${id}`)
+      .then(res => setPosts(res.data))
       .catch(() => setPosts([]));
   }, [id]);
 
@@ -45,22 +45,16 @@ export default function CommunityDetail() {
       communityId: id
     };
 
-    const res = await api.post('/api/community-posts', payload);
+    const res = await axios.post('http://localhost:5000/api/community-posts', payload);
     setPosts([res.data, ...posts]);
     setNewPost('');
     setPreview(null);
   };
 
-  if (!community) {
-    return (
-      <div className="p-10 text-center text-lg">
-        Community not found.
-      </div>
-    );
-  }
+  if (!community) return <div className="p-10 text-center text-lg">Community not found.</div>;
 
   return (
-    <div className="min-h-screen bg-[#f1f3ec] text-[#2f4435]">
+    <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
       <Navbar />
 
       <div className="max-w-4xl mx-auto px-6 py-10 bg-white rounded shadow-md mt-6">
@@ -69,20 +63,14 @@ export default function CommunityDetail() {
           alt={community.name}
           className="w-full h-64 object-cover rounded mb-4"
         />
-        <h2 className="text-3xl font-bold text-[#2f4430]">
-          {community.name}
-        </h2>
+        <h2 className="text-3xl font-bold text-[#2f4430]">{community.name}</h2>
         <p className="text-sm text-[#5f705e] mt-1">
           {community.street}, {community.postal}
         </p>
-        <p className="mt-4 text-[#3a4e38] text-base">
-          {community.description}
-        </p>
+        <p className="mt-4 text-[#3a4e38] text-base">{community.description}</p>
 
         <div className="mt-6">
-          <h3 className="text-lg font-semibold text-[#2f4430] mb-2">
-            Members
-          </h3>
+          <h3 className="text-lg font-semibold text-[#2f4430] mb-2">Members</h3>
           {community.members.length === 0 ? (
             <p className="text-sm text-gray-500">No members yet</p>
           ) : (
@@ -106,47 +94,25 @@ export default function CommunityDetail() {
             onChange={(e) => setNewPost(e.target.value)}
           />
           <input type="file" accept="image/*" onChange={handleImageChange} />
-          {preview && (
-            <img
-              src={preview}
-              alt="Preview"
-              className="w-full h-48 object-cover rounded"
-            />
-          )}
-          <button
-            type="submit"
-            className="bg-[#d4e7ba] px-4 py-2 rounded font-semibold text-sm"
-          >
+          {preview && <img src={preview} alt="Preview" className="w-full h-48 object-cover rounded" />}
+          <button type="submit" className="bg-[#d4e7ba] px-4 py-2 rounded font-semibold text-sm">
             Post
           </button>
         </form>
 
         {/* Post Feed */}
-        <h3 className="text-lg font-semibold text-[#2f4430] mb-2">
-          Posts
-        </h3>
+        <h3 className="text-lg font-semibold text-[#2f4430] mb-2">Posts</h3>
         {posts.length === 0 ? (
           <p className="text-sm text-gray-500">No posts yet.</p>
         ) : (
-          posts.map((post) => (
-            <div
-              key={post._id}
-              className="bg-[#f9f9f3] p-4 rounded-lg shadow mb-4"
-            >
+          posts.map(post => (
+            <div key={post._id} className="bg-[#f9f9f3] p-4 rounded-lg shadow mb-4">
               <div className="flex justify-between items-center mb-2">
                 <h4 className="font-semibold">{post.name}</h4>
-                <span className="text-xs text-gray-500">
-                  {new Date(post.createdAt).toLocaleString()}
-                </span>
+                <span className="text-xs text-gray-500">{new Date(post.createdAt).toLocaleString()}</span>
               </div>
               <p className="text-sm">{post.message}</p>
-              {post.image && (
-                <img
-                  src={post.image}
-                  alt="Post"
-                  className="w-full rounded mt-2"
-                />
-              )}
+              {post.image && <img src={post.image} alt="Post" className="w-full rounded mt-2" />}
             </div>
           ))
         )}

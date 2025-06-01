@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import axios from 'axios';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import WeatherHero from '../components/WeatherHero';
@@ -9,7 +9,7 @@ import placeholderImg from '../assets/communities/placeholder.jpg';
 export default function Communities() {
   const [created, setCreated] = useState([]);
   const [joined, setJoined] = useState([]);
-  const [globalList, setGlobalList] = useState([]);
+  const [global, setGlobal] = useState([]);
   const [form, setForm] = useState({
     name: '',
     street: '',
@@ -23,15 +23,15 @@ export default function Communities() {
   useEffect(() => {
     if (!currentUser?._id) return;
 
-    api.get('/api/communities').then((res) => {
-      setGlobalList(res.data);
+    axios.get('http://localhost:5000/api/communities').then((res) => {
+      setGlobal(res.data);
     });
 
-    api.get(`/api/communities/user/${currentUser._id}`).then((res) => {
+    axios.get(`http://localhost:5000/api/communities/user/${currentUser._id}`).then((res) => {
       setCreated(res.data.created);
       setJoined(res.data.joined);
     });
-  }, [currentUser?._id]);
+  }, []);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -49,14 +49,14 @@ export default function Communities() {
       userId: currentUser._id,
     };
 
-    const res = await api.post('/api/communities', newCommunity);
+    const res = await axios.post('http://localhost:5000/api/communities', newCommunity);
     setCreated([res.data, ...created]);
-    setGlobalList([res.data, ...globalList]);
+    setGlobal([res.data, ...global]);
     setForm({ name: '', street: '', postal: '', community: '', description: '' });
   };
 
   const handleJoin = async (comm) => {
-    await api.post(`/api/communities/${comm._id}/join`, {
+    await axios.post(`http://localhost:5000/api/communities/${comm._id}/join`, {
       userId: currentUser._id,
     });
     setJoined([comm, ...joined]);
@@ -65,7 +65,7 @@ export default function Communities() {
   const isYourCommunity = (comm) =>
     created.some((c) => c._id === comm._id) || joined.some((c) => c._id === comm._id);
 
-  const availableGlobals = globalList.filter((comm) => !isYourCommunity(comm));
+  const availableGlobals = global.filter((comm) => !isYourCommunity(comm));
   const yourCommunities = [...created, ...joined];
 
   return (
@@ -80,9 +80,7 @@ export default function Communities() {
 
           {yourCommunities.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold text-[#3c5139] mb-2">
-                Your Communities
-              </h3>
+              <h3 className="text-lg font-semibold text-[#3c5139] mb-2">Your Communities</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 {yourCommunities.map((comm) => (
                   <Link to={`/communities/${comm._id}`} key={comm._id}>
@@ -92,7 +90,7 @@ export default function Communities() {
                         alt={comm.name}
                         className="w-full h-32 object-cover rounded mb-2"
                       />
-                      <h4 className="font-bold text-[#2f4435]">{comm.name}</h4>
+                      <h4 className="font-bold text-[#2f4235]">{comm.name}</h4>
                       <p className="text-sm text-[#5f705e]">
                         {comm.street}, {comm.postal}
                       </p>
@@ -105,22 +103,17 @@ export default function Communities() {
           )}
 
           <div>
-            <h3 className="text-lg font-semibold text-[#3c5139] mb-2">
-              Global Communities
-            </h3>
+            <h3 className="text-lg font-semibold text-[#3c5139] mb-2">Global Communities</h3>
             <div className="grid sm:grid-cols-2 gap-4">
               {availableGlobals.map((comm) => (
-                <div
-                  key={comm._id}
-                  className="bg-white p-4 rounded-lg shadow hover:bg-[#f5f8ef]"
-                >
+                <div key={comm._id} className="bg-white p-4 rounded-lg shadow hover:bg-[#f5f8ef]">
                   <Link to={`/communities/${comm._id}`}>
                     <img
                       src={comm.image}
                       alt={comm.name}
                       className="w-full h-32 object-cover rounded mb-2"
                     />
-                    <h4 className="font-bold text-[#2f4435]">{comm.name}</h4>
+                    <h4 className="font-bold text-[#2f4235]">{comm.name}</h4>
                     <p className="text-sm text-[#5f705e]">
                       {comm.street}, {comm.postal}
                     </p>
@@ -140,9 +133,7 @@ export default function Communities() {
 
         {/* RIGHT FORM */}
         <div className="md:w-1/3 bg-[#f7f7ec] p-6 border border-[#d6d6c2] rounded-lg shadow">
-          <h3 className="text-xl font-bold mb-4 text-[#2f4430]">
-            Create Your Own Community
-          </h3>
+          <h3 className="text-xl font-bold mb-4 text-[#2f4430]">Create Your Own Community</h3>
           <form onSubmit={handleCreate} className="space-y-4 text-sm">
             <input
               type="text"
