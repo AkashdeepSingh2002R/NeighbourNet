@@ -4,27 +4,31 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const dotenv = require("dotenv");
-
-const userRoutes = require("./routes/userRoutes"); // ✅ match your folder exactly
+const userRoutes = require("./routes/userRoutes");
 const postRoutes = require("./routes/postRoutes");
 const communityRoutes = require("./routes/communityRoutes");
 const communityPostRoutes = require("./routes/communityPostRoutes");
 
-dotenv.config();
+dotenv.config(); // Load .env variables
 
-const app = express();
+const app = express(); // ✅ Define app here FIRST
+
+// Check if MONGO_URL is set
+if (!process.env.MONGO_URL) {
+  throw new Error("❌ MONGO_URL is not defined. Check your .env file.");
+}
 
 app.use(express.json());
 
-// ✅ Allow Netlify frontend + cookies
+// CORS setup
 app.use(
   cors({
-    origin: "https://remarkable-pithivier-c497c5.netlify.app",
+    origin: "https://remarkable-pithivier-c497c5.netlify.app", // your frontend
     credentials: true,
   })
 );
 
-// ✅ Secure session for cookies to work on mobile
+// Session setup
 app.use(
   session({
     secret: "neighbournetsecret",
@@ -34,30 +38,26 @@ app.use(
       mongoUrl: process.env.MONGO_URL,
     }),
     cookie: {
-      secure: true,        // 🔒 Required for HTTPS (mobile devices)
-      sameSite: "None",    // 🔄 Required for cross-origin cookies
+      secure: true,
+      sameSite: "None",
     },
   })
 );
 
-// ✅ Connect MongoDB
+// Connect to MongoDB
 mongoose
-  .connect(process.env.MONGO_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URL)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB error:", err));
 
-// ✅ All Routes
+// Routes
 app.use("/api/users", userRoutes);
 app.use("/api/posts", postRoutes);
 app.use("/api/communities", communityRoutes);
 app.use("/api/community-posts", communityPostRoutes);
 
-// ✅ Optional test route
 app.get("/", (req, res) => {
-  res.send("NeighbourNet backend is live 🚀");
+  res.send("NeighbourNet backend running 🚀");
 });
 
 const PORT = process.env.PORT || 5000;
