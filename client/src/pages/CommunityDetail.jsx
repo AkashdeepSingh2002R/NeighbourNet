@@ -13,14 +13,14 @@ export default function CommunityDetail() {
   const user = JSON.parse(localStorage.getItem('user'));
 
   useEffect(() => {
-    axios.get(`http://localhost:5000/api/communities/${id}`)
+    axios.get(` https://neighbournet-42ys.onrender.com/api/communities/${id}`)
       .then(res => setCommunity(res.data))
       .catch(err => {
         console.error('Community not found:', err);
         setCommunity(null);
       });
 
-    axios.get(`http://localhost:5000/api/community-posts/${id}`)
+    axios.get(` https://neighbournet-42ys.onrender.com/api/community-posts/${id}`)
       .then(res => setPosts(res.data))
       .catch(() => setPosts([]));
   }, [id]);
@@ -45,7 +45,7 @@ export default function CommunityDetail() {
       communityId: id
     };
 
-    const res = await axios.post('http://localhost:5000/api/community-posts', payload);
+    const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/community-posts', payload);
     setPosts([res.data, ...posts]);
     setNewPost('');
     setPreview(null);

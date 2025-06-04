@@ -29,7 +29,7 @@ export default function LandingLogin({ onLogin }) {
 
     try {
       if (isSignup) {
-        const res = await axios.post('http://localhost:5000/api/users/register', {
+        const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/users/register', {
           name: form.name.trim(),
           email: trimmedEmail,
           password: trimmedPassword,
@@ -41,7 +41,7 @@ export default function LandingLogin({ onLogin }) {
         onLogin(res.data);
         navigate('/home');
       } else {
-        const res = await axios.post('http://localhost:5000/api/users/login', {
+        const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/users/login', {
           email: trimmedEmail,
           password: trimmedPassword,
         });

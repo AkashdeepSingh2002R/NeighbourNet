@@ -20,21 +20,21 @@ export default function Home({ onLogout }) {
     if (!user || !user._id) return;
     setCurrentUser(user);
 
-    axios.get(`http://localhost:5000/api/users/${user._id}/friends`)
+    axios.get(` https://neighbournet-42ys.onrender.com/api/users/${user._id}/friends`)
       .then(res => {
         setFriends(res.data);
         const friendIds = res.data.map(f => f._id);
-        axios.get('http://localhost:5000/api/posts')
+        axios.get(' https://neighbournet-42ys.onrender.com/api/posts')
           .then(postRes => {
             const filtered = postRes.data.filter(post => friendIds.includes(post.userId));
             setPosts(filtered);
           });
       });
 
-    axios.get(`http://localhost:5000/api/users/${user._id}/friend-requests`)
+    axios.get(` https://neighbournet-42ys.onrender.com/api/users/${user._id}/friend-requests`)
       .then(res => setFriendRequests(res.data));
 
-    axios.get('http://localhost:5000/api/users').then(res => {
+    axios.get(' https://neighbournet-42ys.onrender.com/api/users').then(res => {
       setUsers(res.data);
 
       const requestedTo = res.data.filter(u =>
@@ -46,15 +46,15 @@ export default function Home({ onLogout }) {
   }, []);
 
   const acceptRequest = async (senderId) => {
-    await axios.post(`http://localhost:5000/api/users/${currentUser._id}/accept-request`, { senderId });
-    const updatedFriends = await axios.get(`http://localhost:5000/api/users/${currentUser._id}/friends`);
-    const updatedRequests = await axios.get(`http://localhost:5000/api/users/${currentUser._id}/friend-requests`);
+    await axios.post(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/accept-request`, { senderId });
+    const updatedFriends = await axios.get(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/friends`);
+    const updatedRequests = await axios.get(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/friend-requests`);
     setFriends(updatedFriends.data);
     setFriendRequests(updatedRequests.data);
   };
 
   const sendFriendRequest = async (targetId) => {
-    await axios.post(`http://localhost:5000/api/users/${currentUser._id}/send-request`, { targetId });
+    await axios.post(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/send-request`, { targetId });
     setSentRequests([...sentRequests, targetId]);
   };
 
@@ -62,7 +62,7 @@ export default function Home({ onLogout }) {
     const confirm = window.confirm('Cancel friend request?');
     if (!confirm) return;
 
-    await axios.post(`http://localhost:5000/api/users/${currentUser._id}/cancel-request`, { targetId });
+    await axios.post(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/cancel-request`, { targetId });
     setSentRequests(sentRequests.filter(id => id !== targetId));
   };
 
@@ -85,7 +85,7 @@ export default function Home({ onLogout }) {
       image: preview || '',
     };
 
-    await axios.post('http://localhost:5000/api/posts', postPayload);
+    await axios.post(' https://neighbournet-42ys.onrender.com/api/posts', postPayload);
     setNewPost('');
     setPreview(null);
     alert('Post shared!');

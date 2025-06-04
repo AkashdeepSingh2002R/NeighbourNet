@@ -23,11 +23,11 @@ export default function Communities() {
   useEffect(() => {
     if (!currentUser?._id) return;
 
-    axios.get('http://localhost:5000/api/communities').then((res) => {
+    axios.get(' https://neighbournet-42ys.onrender.com/api/communities').then((res) => {
       setGlobal(res.data);
     });
 
-    axios.get(`http://localhost:5000/api/communities/user/${currentUser._id}`).then((res) => {
+    axios.get(` https://neighbournet-42ys.onrender.com/api/communities/user/${currentUser._id}`).then((res) => {
       setCreated(res.data.created);
       setJoined(res.data.joined);
     });
@@ -49,14 +49,14 @@ export default function Communities() {
       userId: currentUser._id,
     };
 
-    const res = await axios.post('http://localhost:5000/api/communities', newCommunity);
+    const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/communities', newCommunity);
     setCreated([res.data, ...created]);
     setGlobal([res.data, ...global]);
     setForm({ name: '', street: '', postal: '', community: '', description: '' });
   };
 
   const handleJoin = async (comm) => {
-    await axios.post(`http://localhost:5000/api/communities/${comm._id}/join`, {
+    await axios.post(` https://neighbournet-42ys.onrender.com/api/communities/${comm._id}/join`, {
       userId: currentUser._id,
     });
     setJoined([comm, ...joined]);
