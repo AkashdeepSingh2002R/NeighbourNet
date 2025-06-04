@@ -5,7 +5,7 @@ import { FaUserCircle } from 'react-icons/fa';
 import c1 from '../assets/c1.webp';
 import c2 from '../assets/c2.jpeg';
 import c3 from '../assets/c3.jpg';
-import axios from '../api/axios'; // ✅ FIXED: use shared axios instance
+import axios from 'axios';
 
 export default function LandingLogin({ onLogin }) {
   const navigate = useNavigate();
@@ -26,32 +26,32 @@ export default function LandingLogin({ onLogin }) {
     e.preventDefault();
     const trimmedEmail = form.email.trim();
     const trimmedPassword = form.password.trim();
-    setError('');
 
     try {
       if (isSignup) {
-        const res = await axios.post('/signup', form);
-        if (res.data.success) {
-          onLogin(res.data.user);
-          navigate('/welcome');
-        } else {
-          setError(res.data.message || 'Signup failed.');
-        }
+        const res = await axios.post('http://localhost:5000/api/users/register', {
+          name: form.name.trim(),
+          email: trimmedEmail,
+          password: trimmedPassword,
+          city: form.city.trim(),
+          postalCode: form.postalCode.trim()
+        });
+
+        localStorage.setItem('user', JSON.stringify(res.data));
+        onLogin(res.data);
+        navigate('/home');
       } else {
-        const res = await axios.post('/login', {
+        const res = await axios.post('http://localhost:5000/api/users/login', {
           email: trimmedEmail,
           password: trimmedPassword,
         });
-        if (res.data.success) {
-          onLogin(res.data.user);
-          navigate('/welcome');
-        } else {
-          setError(res.data.message || 'Login failed.');
-        }
+
+        localStorage.setItem('user', JSON.stringify(res.data));
+        onLogin(res.data);
+        navigate('/home');
       }
     } catch (err) {
-      console.error('Login error:', err);
-      setError('Something went wrong. Try again.');
+      setError(err.response?.data?.message || 'Something went wrong');
     }
   };
 

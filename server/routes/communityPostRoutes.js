@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const CommunityPost = require('../models/communityPostModel'); // ✅ exact file name
+const CommunityPost = require('../models/CommunityPost');
 
 router.post('/', async (req, res) => {
   const post = new CommunityPost(req.body);
