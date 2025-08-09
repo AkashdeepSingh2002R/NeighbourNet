@@ -15,16 +15,11 @@ export default function Home({ onLogout }) {
   const [newPost, setNewPost] = useState('');
   const [preview, setPreview] = useState(null);
 
-  // Weather summary (read from localStorage if WeatherHero saves it, else show fallback)
-  const [weather, setWeather] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('weather_summary') || 'null'); } catch { return null; }
-  });
-
   const s = (v) => (v ?? '').toString();
   const arr = (v) => (Array.isArray(v) ? v : []);
 
   useEffect(() => {
-    // Try cookie auth /me (upgrade pack), else fallback to localStorage user
+    // Try cookie auth /me, else fallback to localStorage user
     api.get('/users/me')
       .then(({ data }) => {
         setCurrentUser(data);
@@ -39,14 +34,6 @@ export default function Home({ onLogout }) {
           }
         } catch {}
       });
-
-    // Listen for a custom event WeatherHero can dispatch: window.dispatchEvent(new CustomEvent('weather:update', { detail }))
-    const onWeather = (e) => {
-      setWeather(e.detail);
-      try { localStorage.setItem('weather_summary', JSON.stringify(e.detail)); } catch {}
-    };
-    window.addEventListener('weather:update', onWeather);
-    return () => window.removeEventListener('weather:update', onWeather);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,8 +67,8 @@ export default function Home({ onLogout }) {
         api.get(`/users/${currentUser._id}/friends`),
         api.get(`/users/${currentUser._id}/friend-requests`),
       ]);
-      setFriends(arr(friendsRes.data));
-      setFriendRequests(arr(reqRes.data));
+        setFriends(arr(friendsRes.data));
+        setFriendRequests(arr(reqRes.data));
     } catch (e) {
       console.error('Accept request error:', e?.response?.data || e);
       alert(e?.response?.data?.message || 'Could not accept request');
@@ -130,51 +117,29 @@ export default function Home({ onLogout }) {
   };
 
   const confirmedFriendIds = friends.map((f) => f._id);
-  const displayName =
-    s(currentUser?.name) ||
-    s((() => { try { return JSON.parse(localStorage.getItem('user') || '{}')?.name; } catch { return ''; } })());
 
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
-      
 
-      {/* ===== Welcome + quick weather ===== */}
-      <header className="max-w-6xl mx-auto px-6 pt-8">
-        <div className="bg-white rounded-xl shadow px-6 py-5 flex flex-col gap-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold">
-                {displayName ? `Welcome, ${displayName}` : 'Welcome'}
-              </h1>
-              <p className="text-sm text-gray-600">
-                {weather
-                  ? `Weather: ${weather.city || ''} ${weather.temp ?? ''}°C, ${weather.desc || ''}`
-                  : 'Weather: updating…'}
-              </p>
-            </div>
-            {/* Keep your existing component on the right; it can set localStorage or dispatch the event */}
-            <div className="w-full md:w-auto">
-              <WeatherHero />
-            </div>
-          </div>
-
-          {/* Quick actions to new features */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Link to="/profile" className="bg-[#e8f4e1] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
-              Profile
-            </Link>
-            <Link to="/messages" className="bg-[#e1f0ff] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
-              Messages
-            </Link>
-            <Link to="/notifications" className="bg-[#fff1cc] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
-              Notifications
-            </Link>
-            <Link to="/explore" className="bg-[#f2e9ff] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
-              Explore
-            </Link>
-          </div>
+      {/* Weather hero at the top */}
+      <section className="max-w-6xl mx-auto px-6 pt-8">
+        <WeatherHero city={currentUser?.city} />
+        {/* Keep the main buttons under the hero */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          <Link to="/profile" className="bg-[#e8f4e1] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+            Profile
+          </Link>
+          <Link to="/messages" className="bg-[#e1f0ff] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+            Messages
+          </Link>
+          <Link to="/notifications" className="bg-[#fff1cc] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+            Notifications
+          </Link>
+          <Link to="/explore" className="bg-[#f2e9ff] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+            Explore
+          </Link>
         </div>
-      </header>
+      </section>
 
       {/* Optional: keep your existing action tiles row */}
       <section className="max-w-6xl mx-auto px-6 mt-6">
@@ -305,8 +270,6 @@ export default function Home({ onLogout }) {
           </div>
         </aside>
       </main>
-
-      
     </div>
   );
 }

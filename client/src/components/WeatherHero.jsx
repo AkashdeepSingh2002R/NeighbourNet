@@ -1,29 +1,58 @@
 import React, { useEffect, useState } from 'react';
+import api from '../api/axios'; // ✅ used only for the /users/me fallback
 
 export default function WeatherHero({ onThemeChange }) {
   const [user, setUser] = useState(null);
   const [weather, setWeather] = useState(null);
 
-  const API_KEY = 'd2f197eb7d1d4b73aee04612250605'; // ✅ Corrected
+  const API_KEY = 'd2f197eb7d1d4b73aee04612250605'; // ✅ your key
 
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem('user'));
-    if (stored?.city) {
-      setUser(stored);
-      fetchWeather(stored.city);
-    }
-  }, []);
+    let cancelled = false;
+
+    const boot = async () => {
+      // 1) Try localStorage (your original flow)
+      let stored = null;
+      try {
+        stored = JSON.parse(localStorage.getItem('user') || 'null');
+      } catch {}
+
+      if (stored?.city) {
+        if (!cancelled) {
+          setUser(stored);
+          fetchWeather(stored.city);
+        }
+        return;
+      }
+
+      // 2) Fallback: ask backend for full profile (adds city/postal if missing)
+      try {
+        const { data } = await api.get('/users/me');
+        if (!cancelled && data) {
+          try { localStorage.setItem('user', JSON.stringify(data)); } catch {}
+          setUser(data);
+          if (data.city) fetchWeather(data.city);
+        }
+      } catch {
+        // silently ignore — component will render nothing (same as your original)
+      }
+    };
+
+    boot();
+    return () => { cancelled = true; };
+  }, []); // run once like before
 
   const fetchWeather = async (city) => {
+    if (!city) return;
     try {
       const res = await fetch(
-        `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${city}`
+        `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${encodeURIComponent(city)}`
       );
       const data = await res.json();
 
       if (data && data.current) {
         setWeather(data);
-        onThemeChange?.(data.current.condition.text); // optional chaining
+        onThemeChange?.(data.current.condition.text);
       } else {
         console.error('Invalid weather data:', data);
       }
@@ -32,6 +61,7 @@ export default function WeatherHero({ onThemeChange }) {
     }
   };
 
+  // Keep original behavior: render nothing if we have no user yet
   if (!user) return null;
 
   return (
@@ -42,7 +72,7 @@ export default function WeatherHero({ onThemeChange }) {
             Welcome back, {user.name}
           </h1>
           <p className="text-[#4b5e4a] text-sm mt-1">
-            Location: {user.city}, {user.postalCode}
+            Location: {user.city || '—'}, {user.postalCode || '—'}
           </p>
         </div>
 

@@ -89,19 +89,21 @@ const updateProfile = async (req, res) => {
 };
 
 const follow = async (req, res) => {
-  const me = req.userId || req.body.me || req.query.me; // tolerate unauth legacy
+  const me = req.userId;
   const them = req.params.id;
   if (!me) return res.status(401).json({ message: 'Not authenticated' });
-  if (me === them) return res.status(400).json({ message: 'Cannot follow yourself' });
+  if (!them) return res.status(400).json({ message: 'Missing target id' });
+  if (String(me) === String(them)) return res.status(400).json({ message: 'Cannot follow yourself' });
   await User.findByIdAndUpdate(me, { $addToSet: { following: them } });
   await User.findByIdAndUpdate(them, { $addToSet: { followers: me } });
   res.json({ ok: true });
 };
 
 const unfollow = async (req, res) => {
-  const me = req.userId || req.body.me || req.query.me;
+  const me = req.userId;
   const them = req.params.id;
   if (!me) return res.status(401).json({ message: 'Not authenticated' });
+  if (!them) return res.status(400).json({ message: 'Missing target id' });
   await User.findByIdAndUpdate(me, { $pull: { following: them } });
   await User.findByIdAndUpdate(them, { $pull: { followers: me } });
   res.json({ ok: true });
