@@ -3,8 +3,7 @@ import axios from 'axios';
 // Use env or default to same-origin '/api'
 export const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-// Socket base: if API_BASE is absolute (http...), strip '/api'.
-// If it's relative ('/api'), use the current origin so socket is same-origin too.
+// Socket base: absolute -> strip '/api'; relative -> current origin
 export const getSocketBase = () => {
   if (/^https?:\/\//.test(API_BASE)) return API_BASE.replace(/\/?api\/?$/, '');
   return window.location.origin;
@@ -12,7 +11,7 @@ export const getSocketBase = () => {
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: true, // keep cookies on all requests
+  withCredentials: true,
 });
 
 export default api;
