@@ -8,6 +8,6 @@ const communitySchema = new mongoose.Schema({
   image: String,
   creator: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Community', communitySchema);

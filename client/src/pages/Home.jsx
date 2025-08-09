@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import { Link } from 'react-router-dom';
+import api from '../api/axios';
+
 import WeatherHero from '../components/WeatherHero';
 import ActionTiles from '../components/ActionTiles';
 
@@ -15,91 +15,173 @@ export default function Home({ onLogout }) {
   const [newPost, setNewPost] = useState('');
   const [preview, setPreview] = useState(null);
 
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (!user || !user._id) return;
-    setCurrentUser(user);
+  // Weather summary (read from localStorage if WeatherHero saves it, else show fallback)
+  const [weather, setWeather] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('weather_summary') || 'null'); } catch { return null; }
+  });
 
-    axios.get(` https://neighbournet-42ys.onrender.com/api/users/${user._id}/friends`)
-      .then(res => {
-        setFriends(res.data);
-        const friendIds = res.data.map(f => f._id);
-        axios.get(' https://neighbournet-42ys.onrender.com/api/posts')
-          .then(postRes => {
-            const filtered = postRes.data.filter(post => friendIds.includes(post.userId));
-            setPosts(filtered);
-          });
+  const s = (v) => (v ?? '').toString();
+  const arr = (v) => (Array.isArray(v) ? v : []);
+
+  useEffect(() => {
+    // Try cookie auth /me (upgrade pack), else fallback to localStorage user
+    api.get('/users/me')
+      .then(({ data }) => {
+        setCurrentUser(data);
+        bootstrap(data?._id);
+      })
+      .catch(() => {
+        try {
+          const ls = JSON.parse(localStorage.getItem('user') || 'null');
+          if (ls?._id) {
+            setCurrentUser(ls);
+            bootstrap(ls._id);
+          }
+        } catch {}
       });
 
-    axios.get(` https://neighbournet-42ys.onrender.com/api/users/${user._id}/friend-requests`)
-      .then(res => setFriendRequests(res.data));
-
-    axios.get(' https://neighbournet-42ys.onrender.com/api/users').then(res => {
-      setUsers(res.data);
-
-      const requestedTo = res.data.filter(u =>
-        u.friendRequests.includes(user._id)
-      ).map(u => u._id);
-
-      setSentRequests(requestedTo);
-    });
+    // Listen for a custom event WeatherHero can dispatch: window.dispatchEvent(new CustomEvent('weather:update', { detail }))
+    const onWeather = (e) => {
+      setWeather(e.detail);
+      try { localStorage.setItem('weather_summary', JSON.stringify(e.detail)); } catch {}
+    };
+    window.addEventListener('weather:update', onWeather);
+    return () => window.removeEventListener('weather:update', onWeather);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function bootstrap(userId) {
+    if (!userId) return;
+    try {
+      const [friendsRes, requestsRes, usersRes] = await Promise.all([
+        api.get(`/users/${userId}/friends`),
+        api.get(`/users/${userId}/friend-requests`),
+        api.get('/users'),
+      ]);
+      const friendList = arr(friendsRes.data);
+      setFriends(friendList);
+      setFriendRequests(arr(requestsRes.data));
+      setUsers(arr(usersRes.data));
+
+      const { data: feed } = await api.get('/posts/feed', { params: { limit: 50 } });
+      const friendIds = new Set(friendList.map((f) => s(f._id)));
+      const onlyFriends = arr(feed.items).filter((p) => friendIds.has(s(p.author?._id || p.author)));
+      setPosts(onlyFriends);
+    } catch (err) {
+      console.error('Bootstrap load error:', err?.response?.data || err);
+    }
+  }
+
   const acceptRequest = async (senderId) => {
-    await axios.post(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/accept-request`, { senderId });
-    const updatedFriends = await axios.get(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/friends`);
-    const updatedRequests = await axios.get(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/friend-requests`);
-    setFriends(updatedFriends.data);
-    setFriendRequests(updatedRequests.data);
+    try {
+      await api.post(`/users/${senderId}/follow`);
+      if (!currentUser?._id) return;
+      const [friendsRes, reqRes] = await Promise.all([
+        api.get(`/users/${currentUser._id}/friends`),
+        api.get(`/users/${currentUser._id}/friend-requests`),
+      ]);
+      setFriends(arr(friendsRes.data));
+      setFriendRequests(arr(reqRes.data));
+    } catch (e) {
+      console.error('Accept request error:', e?.response?.data || e);
+      alert(e?.response?.data?.message || 'Could not accept request');
+    }
   };
 
   const sendFriendRequest = async (targetId) => {
-    await axios.post(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/send-request`, { targetId });
-    setSentRequests([...sentRequests, targetId]);
+    try {
+      await api.post(`/users/${targetId}/follow`);
+      setSentRequests((prev) => [...prev, targetId]);
+    } catch (e) {
+      console.error('Send request error:', e?.response?.data || e);
+      alert(e?.response?.data?.message || 'Could not send request');
+    }
   };
 
   const cancelFriendRequest = async (targetId) => {
-    const confirm = window.confirm('Cancel friend request?');
-    if (!confirm) return;
-
-    await axios.post(` https://neighbournet-42ys.onrender.com/api/users/${currentUser._id}/cancel-request`, { targetId });
-    setSentRequests(sentRequests.filter(id => id !== targetId));
+    const ok = window.confirm('Cancel friend request?');
+    if (!ok) return;
+    try {
+      await api.post(`/users/${targetId}/unfollow`);
+      setSentRequests((prev) => prev.filter((id) => id !== targetId));
+    } catch (e) {
+      console.error('Cancel request error:', e?.response?.data || e);
+      alert(e?.response?.data?.message || 'Could not cancel request');
+    }
   };
 
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setPreview(url);
-    }
+    const file = e.target.files?.[0];
+    if (file) setPreview(URL.createObjectURL(file));
   };
 
   const handlePost = async (e) => {
     e.preventDefault();
     if (!newPost.trim()) return;
-
-    const postPayload = {
-      userId: currentUser._id,
-      name: currentUser.name,
-      message: newPost,
-      image: preview || '',
-    };
-
-    await axios.post(' https://neighbournet-42ys.onrender.com/api/posts', postPayload);
-    setNewPost('');
-    setPreview(null);
-    alert('Post shared!');
+    const payload = { text: newPost, imageUrl: preview || '' };
+    try {
+      const { data } = await api.post('/posts', payload);
+      setNewPost(''); setPreview(null);
+      setPosts((prev) => [data, ...prev]);
+    } catch (e) {
+      console.error('Create post error:', e?.response?.data || e);
+      alert(e?.response?.data?.message || 'Could not create post');
+    }
   };
 
-  const confirmedFriendIds = friends.map(f => f._id);
+  const confirmedFriendIds = friends.map((f) => f._id);
+  const displayName =
+    s(currentUser?.name) ||
+    s((() => { try { return JSON.parse(localStorage.getItem('user') || '{}')?.name; } catch { return ''; } })());
 
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
-      <Navbar onLogout={onLogout} />
-      <WeatherHero />
-      <ActionTiles />
+      
 
-      <main className="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row gap-8">
+      {/* ===== Welcome + quick weather ===== */}
+      <header className="max-w-6xl mx-auto px-6 pt-8">
+        <div className="bg-white rounded-xl shadow px-6 py-5 flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold">
+                {displayName ? `Welcome, ${displayName}` : 'Welcome'}
+              </h1>
+              <p className="text-sm text-gray-600">
+                {weather
+                  ? `Weather: ${weather.city || ''} ${weather.temp ?? ''}°C, ${weather.desc || ''}`
+                  : 'Weather: updating…'}
+              </p>
+            </div>
+            {/* Keep your existing component on the right; it can set localStorage or dispatch the event */}
+            <div className="w-full md:w-auto">
+              <WeatherHero />
+            </div>
+          </div>
+
+          {/* Quick actions to new features */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Link to="/profile" className="bg-[#e8f4e1] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+              Profile
+            </Link>
+            <Link to="/messages" className="bg-[#e1f0ff] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+              Messages
+            </Link>
+            <Link to="/notifications" className="bg-[#fff1cc] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+              Notifications
+            </Link>
+            <Link to="/explore" className="bg-[#f2e9ff] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
+              Explore
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Optional: keep your existing action tiles row */}
+      <section className="max-w-6xl mx-auto px-6 mt-6">
+        <ActionTiles />
+      </section>
+
+      <main className="max-w-6xl mx-auto px-6 py-8 flex flex-col md:flex-row gap-8">
         {/* Posts and New Post Form */}
         <section className="flex-1 space-y-6">
           <form onSubmit={handlePost} className="bg-white p-4 rounded shadow space-y-2">
@@ -119,13 +201,25 @@ export default function Home({ onLogout }) {
           {posts.length === 0 ? (
             <p className="text-gray-500">No posts yet.</p>
           ) : (
-            posts.map(post => (
-              <div key={post._id} className="bg-white p-4 rounded-lg shadow space-y-2">
-                <h3 className="font-semibold">{post.name}</h3>
-                <p className="text-sm">{post.message}</p>
-                {post.image && <img src={post.image} alt="Post" className="w-full rounded mt-2" />}
-              </div>
-            ))
+            posts.map((post) => {
+              const authorName = s(post?.author?.name || post?.name);
+              const text = s(post?.text || post?.message);
+              const image = s(post?.imageUrl || post?.image);
+              return (
+                <div key={post._id} className="bg-white p-4 rounded-lg shadow space-y-2">
+                  <h3 className="font-semibold">{authorName || 'Unknown'}</h3>
+                  <p className="text-sm">{text}</p>
+                  {image ? (
+                    <img
+                      src={image}
+                      alt="Post"
+                      className="w-full rounded mt-2"
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
+                    />
+                  ) : null}
+                </div>
+              );
+            })
           )}
         </section>
 
@@ -134,23 +228,20 @@ export default function Home({ onLogout }) {
           {/* Friend Requests */}
           <div className="bg-[#fff8dc] p-4 rounded-xl shadow">
             <h3 className="text-lg font-semibold mb-3">Friend Requests</h3>
-            {friendRequests.length === 0 ? (
+            {arr(friendRequests).length === 0 ? (
               <p className="text-sm text-gray-500">No pending requests</p>
             ) : (
               <ul className="space-y-4">
-                {friendRequests.map((req) => (
+                {arr(friendRequests).map((req) => (
                   <li key={req._id} className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-yellow-200 rounded-full flex items-center justify-center font-bold text-[#2f4235]">
-                      {req.name[0]}
+                      {s(req?.name)[0] || '?'}
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium">{req.name}</p>
-                      <p className="text-xs text-gray-600">{req.city}</p>
+                      <p className="font-medium">{s(req?.name)}</p>
+                      <p className="text-xs text-gray-600">{s(req?.city)}</p>
                     </div>
-                    <button
-                      onClick={() => acceptRequest(req._id)}
-                      className="text-xs bg-green-200 px-2 py-1 rounded"
-                    >
+                    <button onClick={() => acceptRequest(req._id)} className="text-xs bg-green-200 px-2 py-1 rounded">
                       Accept
                     </button>
                   </li>
@@ -163,52 +254,49 @@ export default function Home({ onLogout }) {
           <div className="bg-[#f6fadd] p-4 rounded-xl shadow">
             <h3 className="text-lg font-semibold mb-3">People Nearby</h3>
             <ul className="space-y-4">
-              {users
-                .filter(u => u._id !== currentUser._id && !confirmedFriendIds.includes(u._id))
-                .map(user => (
-                  <li key={user._id} className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center font-bold text-[#2f4235]">
-                      {user.name[0]}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">{user.name}</p>
-                      <p className="text-xs text-gray-600">{user.city}</p>
-                    </div>
-                    {sentRequests.includes(user._id) ? (
-                      <button
-                        className="text-xs bg-gray-300 px-3 py-1 rounded"
-                        onClick={() => cancelFriendRequest(user._id)}
-                      >
-                        Requested
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => sendFriendRequest(user._id)}
-                        className="text-xs bg-yellow-200 px-3 py-1 rounded"
-                      >
-                        Add Friend
-                      </button>
-                    )}
-                  </li>
-                ))}
+              {arr(users)
+                .filter((u) => u._id !== (currentUser?._id || ''))
+                .map((user) => {
+                  const requested = sentRequests.includes(user._id);
+                  return (
+                    <li key={user._id} className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center font-bold text-[#2f4235]">
+                        {s(user?.name)[0] || '?'}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{s(user?.name)}</p>
+                        <p className="text-xs text-gray-600">{s(user?.city)}</p>
+                      </div>
+                      {requested ? (
+                        <button className="text-xs bg-gray-300 px-3 py-1 rounded" onClick={() => cancelFriendRequest(user._id)}>
+                          Requested
+                        </button>
+                      ) : (
+                        <button onClick={() => sendFriendRequest(user._id)} className="text-xs bg-yellow-200 px-3 py-1 rounded">
+                          Add Friend
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
             </ul>
           </div>
 
           {/* Friends List */}
           <div className="bg-[#e6f7ff] p-4 rounded-xl shadow">
             <h3 className="text-lg font-semibold mb-3">Your Friends</h3>
-            {friends.length === 0 ? (
+            {arr(friends).length === 0 ? (
               <p className="text-sm text-gray-500">You haven't added any friends yet</p>
             ) : (
               <ul className="space-y-4">
-                {friends.map((friend) => (
+                {arr(friends).map((friend) => (
                   <li key={friend._id} className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-[#2f4235]">
-                      {friend.name[0]}
+                      {s(friend?.name)[0] || '?'}
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium">{friend.name}</p>
-                      <p className="text-xs text-gray-600">{friend.city}</p>
+                      <p className="font-medium">{s(friend?.name)}</p>
+                      <p className="text-xs text-gray-600">{s(friend?.city)}</p>
                     </div>
                   </li>
                 ))}
@@ -218,7 +306,7 @@ export default function Home({ onLogout }) {
         </aside>
       </main>
 
-      <Footer />
+      
     </div>
   );
 }

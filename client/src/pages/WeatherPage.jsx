@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 
 const API_KEY = 'd2f197eb7d1d4b73aee04612250605&q'; // Replace with your working key
 
@@ -79,7 +77,7 @@ export default function WeatherPage() {
 
   return (
     <div className="min-h-screen bg-[#e8f1d8] text-[#2f4430]">
-      <Navbar />
+      
 
       {/* Top Weather Section */}
       <section className="px-8 py-12 max-w-6xl mx-auto">
@@ -146,7 +144,7 @@ export default function WeatherPage() {
         </div>
       </section>
 
-      <Footer />
+      
     </div>
   );
 }

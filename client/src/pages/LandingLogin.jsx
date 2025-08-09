@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+
 import { useNavigate } from 'react-router-dom';
-import Footer from '../components/Footer';
+
 import { FaUserCircle } from 'react-icons/fa';
 import c1 from '../assets/c1.webp';
 import c2 from '../assets/c2.jpeg';
 import c3 from '../assets/c3.jpg';
-import axios from 'axios';
+import api from '../api/axios';
 
 export default function LandingLogin({ onLogin }) {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export default function LandingLogin({ onLogin }) {
 
     try {
       if (isSignup) {
-        const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/users/register', {
+        const res = await api.post('/users/register', {
           name: form.name.trim(),
           email: trimmedEmail,
           password: trimmedPassword,
@@ -41,7 +42,7 @@ export default function LandingLogin({ onLogin }) {
         onLogin(res.data);
         navigate('/home');
       } else {
-        const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/users/login', {
+        const res = await api.post('/users/login', {
           email: trimmedEmail,
           password: trimmedPassword,
         });
@@ -204,7 +205,7 @@ export default function LandingLogin({ onLogin }) {
         </form>
       </main>
 
-      <Footer />
+      
     </div>
   );
 }

@@ -1,21 +1,12 @@
 const express = require('express');
-const router = express.Router();
-const {
-  createCommunity,
-  getAllCommunities,
-  joinCommunity,
-  getUserCommunities,
-  getCommunityById,
-  leaveCommunity,
-  deleteCommunity
-} = require('../controllers/communityController');
+const { auth } = require('../middleware/auth');
+const { create, list, join, leave, feed } = require('../controllers/communityController');
 
-router.post('/', createCommunity);
-router.get('/', getAllCommunities);
-router.get('/user/:userId', getUserCommunities);
-router.get('/:id', getCommunityById);
-router.post('/:id/join', joinCommunity);
-router.post('/:id/leave', leaveCommunity);
-router.delete('/:id', deleteCommunity);
+const router = express.Router();
+router.get('/', list);
+router.post('/', auth(), create);
+router.post('/:id/join', auth(), join);
+router.post('/:id/leave', auth(), leave);
+router.get('/:id/feed', auth(false), feed);
 
 module.exports = router;

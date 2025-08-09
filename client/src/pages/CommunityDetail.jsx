@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import axios from 'axios';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import api from '../api/axios';
 
 export default function CommunityDetail() {
   const { id } = useParams(); // community ID
@@ -13,14 +11,14 @@ export default function CommunityDetail() {
   const user = JSON.parse(localStorage.getItem('user'));
 
   useEffect(() => {
-    axios.get(` https://neighbournet-42ys.onrender.com/api/communities/${id}`)
+    api.get('/communities/${id}')
       .then(res => setCommunity(res.data))
       .catch(err => {
         console.error('Community not found:', err);
         setCommunity(null);
       });
 
-    axios.get(` https://neighbournet-42ys.onrender.com/api/community-posts/${id}`)
+    api.get('/community-posts/${id}')
       .then(res => setPosts(res.data))
       .catch(() => setPosts([]));
   }, [id]);
@@ -45,7 +43,7 @@ export default function CommunityDetail() {
       communityId: id
     };
 
-    const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/community-posts', payload);
+    const res = await api.post('/community-posts', payload);
     setPosts([res.data, ...posts]);
     setNewPost('');
     setPreview(null);
@@ -55,7 +53,7 @@ export default function CommunityDetail() {
 
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
-      <Navbar />
+      
 
       <div className="max-w-4xl mx-auto px-6 py-10 bg-white rounded shadow-md mt-6">
         <img
@@ -122,7 +120,7 @@ export default function CommunityDetail() {
         </Link>
       </div>
 
-      <Footer />
+      
     </div>
   );
 }

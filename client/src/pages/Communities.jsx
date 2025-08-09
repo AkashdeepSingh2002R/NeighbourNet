@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+import api from '../api/axios';
+
 import WeatherHero from '../components/WeatherHero';
 import placeholderImg from '../assets/communities/placeholder.jpg';
 
@@ -23,14 +22,20 @@ export default function Communities() {
   useEffect(() => {
     if (!currentUser?._id) return;
 
-    axios.get(' https://neighbournet-42ys.onrender.com/api/communities').then((res) => {
-      setGlobal(res.data);
-    });
+    api.get('/communities')
+      .then((res) => {
+        setGlobal(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((err) => console.error('Load all communities error:', err?.response?.data || err));
 
-    axios.get(` https://neighbournet-42ys.onrender.com/api/communities/user/${currentUser._id}`).then((res) => {
-      setCreated(res.data.created);
-      setJoined(res.data.joined);
-    });
+    // ✅ FIXED: use backticks for string interpolation
+    api.get(`/communities/user/${currentUser._id}`)
+      .then((res) => {
+        // keep your original shape expectations
+        setCreated(Array.isArray(res.data?.created) ? res.data.created : []);
+        setJoined(Array.isArray(res.data?.joined) ? res.data.joined : []);
+      })
+      .catch((err) => console.error('Load user communities error:', err?.response?.data || err));
   }, []);
 
   const handleChange = (e) => {
@@ -39,6 +44,7 @@ export default function Communities() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (!currentUser?._id) return;
 
     const newCommunity = {
       name: form.community,
@@ -49,28 +55,41 @@ export default function Communities() {
       userId: currentUser._id,
     };
 
-    const res = await axios.post(' https://neighbournet-42ys.onrender.com/api/communities', newCommunity);
-    setCreated([res.data, ...created]);
-    setGlobal([res.data, ...global]);
-    setForm({ name: '', street: '', postal: '', community: '', description: '' });
+    try {
+      const res = await api.post('/communities', newCommunity);
+      const createdComm = res.data;
+      setCreated([createdComm, ...created]);
+      setGlobal([createdComm, ...global]);
+      setForm({ name: '', street: '', postal: '', community: '', description: '' });
+    } catch (err) {
+      console.error('Create community error:', err?.response?.data || err);
+      alert(err?.response?.data?.message || 'Could not create community');
+    }
   };
 
   const handleJoin = async (comm) => {
-    await axios.post(` https://neighbournet-42ys.onrender.com/api/communities/${comm._id}/join`, {
-      userId: currentUser._id,
-    });
-    setJoined([comm, ...joined]);
+    if (!currentUser?._id) return;
+    try {
+      // ✅ FIXED: backticks here too
+      await api.post(`/communities/${comm._id}/join`, {
+        userId: currentUser._id,
+      });
+      setJoined([comm, ...joined]);
+    } catch (err) {
+      console.error('Join community error:', err?.response?.data || err);
+      alert(err?.response?.data?.message || 'Could not join community');
+    }
   };
 
   const isYourCommunity = (comm) =>
     created.some((c) => c._id === comm._id) || joined.some((c) => c._id === comm._id);
 
-  const availableGlobals = global.filter((comm) => !isYourCommunity(comm));
+  const availableGlobals = (Array.isArray(global) ? global : []).filter((comm) => !isYourCommunity(comm));
   const yourCommunities = [...created, ...joined];
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f1f3ec] text-[#2f4235]">
-      <Navbar />
+      
       <WeatherHero hideButtons />
 
       <main className="flex flex-col md:flex-row gap-10 px-8 py-6">
@@ -89,6 +108,7 @@ export default function Communities() {
                         src={comm.image}
                         alt={comm.name}
                         className="w-full h-32 object-cover rounded mb-2"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
                       />
                       <h4 className="font-bold text-[#2f4235]">{comm.name}</h4>
                       <p className="text-sm text-[#5f705e]">
@@ -112,6 +132,7 @@ export default function Communities() {
                       src={comm.image}
                       alt={comm.name}
                       className="w-full h-32 object-cover rounded mb-2"
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
                     />
                     <h4 className="font-bold text-[#2f4235]">{comm.name}</h4>
                     <p className="text-sm text-[#5f705e]">
@@ -189,7 +210,7 @@ export default function Communities() {
         </div>
       </main>
 
-      <Footer />
+      
     </div>
   );
 }

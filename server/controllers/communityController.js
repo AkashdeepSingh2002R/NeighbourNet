@@ -1,120 +1,33 @@
 const Community = require('../models/Community');
+const Post = require('../models/Post');
 
-// Create a new community
-const createCommunity = async (req, res) => {
-  try {
-    const { name, street, postal, description, image, userId } = req.body;
-
-    const newComm = new Community({
-      name,
-      street,
-      postal,
-      description,
-      image,
-      creator: userId,
-      members: [userId]
-    });
-
-    await newComm.save();
-    res.json(newComm);
-  } catch (err) {
-    res.status(500).json({ message: 'Error creating community', error: err.message });
-  }
+const create = async (req, res) => {
+  const { name, description, street, postal, image } = req.body;
+  const c = await Community.create({ name, description, street, postal, image, creator: req.userId, members: [req.userId] });
+  res.json(c);
 };
 
-// Get all global communities
-const getAllCommunities = async (req, res) => {
-  try {
-    const communities = await Community.find().populate('creator', 'name');
-    res.json(communities);
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching communities', error: err.message });
-  }
+const list = async (req, res) => {
+  const rows = await Community.find().limit(100);
+  res.json(rows);
 };
 
-// Join a community
-const joinCommunity = async (req, res) => {
-  try {
-    const { userId } = req.body;
-    const comm = await Community.findById(req.params.id);
-
-    if (!comm.members.includes(userId)) {
-      comm.members.push(userId);
-      await comm.save();
-    }
-
-    res.json({ message: 'Joined community' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error joining community', error: err.message });
-  }
+const join = async (req, res) => {
+  const id = req.params.id;
+  await Community.findByIdAndUpdate(id, { $addToSet: { members: req.userId } });
+  res.json({ ok: true });
 };
 
-// Get communities for a user
-const getUserCommunities = async (req, res) => {
-  try {
-    const userId = req.params.userId;
-
-    const created = await Community.find({ creator: userId });
-    const joined = await Community.find({
-      members: userId,
-      creator: { $ne: userId }
-    });
-
-    res.json({ created, joined });
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching user communities', error: err.message });
-  }
+const leave = async (req, res) => {
+  const id = req.params.id;
+  await Community.findByIdAndUpdate(id, { $pull: { members: req.userId } });
+  res.json({ ok: true });
 };
 
-// Get single community detail
-const getCommunityById = async (req, res) => {
-  try {
-    const comm = await Community.findById(req.params.id).populate('members', 'name email');
-    if (!comm) return res.status(404).json({ message: 'Community not found' });
-    res.json(comm);
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching community', error: err.message });
-  }
+const feed = async (req, res) => {
+  const id = req.params.id;
+  const posts = await Post.find({ communityId: id, deletedAt: null }).sort({ _id: -1 }).limit(50);
+  res.json(posts);
 };
 
-// Leave a community
-const leaveCommunity = async (req, res) => {
-  try {
-    const { userId } = req.body;
-    const comm = await Community.findById(req.params.id);
-
-    comm.members = comm.members.filter(id => id.toString() !== userId);
-    await comm.save();
-
-    res.json({ message: 'Left community' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error leaving community', error: err.message });
-  }
-};
-
-// Delete a community (if user is creator)
-const deleteCommunity = async (req, res) => {
-  try {
-    const { userId } = req.body;
-    const comm = await Community.findById(req.params.id);
-
-    if (comm.creator.toString() !== userId) {
-      return res.status(403).json({ message: 'Not authorized to delete' });
-    }
-
-    await comm.deleteOne();
-    res.json({ message: 'Community deleted' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error deleting community', error: err.message });
-  }
-};
-
-module.exports = {
-  createCommunity,
-  getAllCommunities,
-  joinCommunity,
-  getUserCommunities,
-  getCommunityById,
-  leaveCommunity,
-  deleteCommunity
-};
+module.exports = { create, list, join, leave, feed };

@@ -1,0 +1,13 @@
+Code-only export (client + server). Heavy assets and build outputs were removed.
+
+Client (Vite + React Router v7):
+1) cd client
+2) npm install
+3) npm run dev
+
+Server (Express):
+1) cd server
+2) npm install
+3) npm start (or: node server.js)
+
+Note: If your src imports large images from /public or local assets, you may need to restore those images.

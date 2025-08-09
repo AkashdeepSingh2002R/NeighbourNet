@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
+
 import { useNavigate } from 'react-router-dom';
 
 const initialRentals = [
@@ -71,7 +70,7 @@ export default function Rentals() {
 
   return (
     <div className="min-h-screen bg-[#e8f1d8] text-[#2f4235]">
-      <Navbar />
+      
       <main className="max-w-6xl mx-auto px-6 py-10">
         <h2 className="text-4xl font-bold mb-2">Rentals in {user?.postal || 'Your Area'}</h2>
         <p className="text-md mb-10 text-[#5a6d59]">Explore rental listings in your community.</p>
@@ -171,7 +170,7 @@ export default function Rentals() {
           </div>
         </div>
       </main>
-      <Footer />
+      
     </div>
   );
 }

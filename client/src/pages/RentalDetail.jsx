@@ -1,7 +1,5 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 
 const initialRentals = [
   {
@@ -33,7 +31,7 @@ export default function RentalDetail() {
   if (!rental) {
     return (
       <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
-        <Navbar />
+        
         <main className="max-w-4xl mx-auto px-6 py-10">
           <h2 className="text-2xl font-bold">Rental Not Found</h2>
           <p className="mt-2 text-sm">Sorry, this rental doesn't exist.</p>
@@ -44,14 +42,14 @@ export default function RentalDetail() {
             Go Back
           </button>
         </main>
-        <Footer />
+        
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
-      <Navbar />
+      
       <main className="max-w-4xl mx-auto px-6 py-10">
         <div className="bg-white rounded-lg shadow p-6">
           <img
@@ -72,7 +70,7 @@ export default function RentalDetail() {
           </button>
         </div>
       </main>
-      <Footer />
+      
     </div>
   );
 }
