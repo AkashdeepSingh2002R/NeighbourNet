@@ -1,18 +1,25 @@
 ﻿const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
-const ctrl = require('../controllers/authController');
+const ctrl = require('../controllers/userController');
+const authCtrl = require('../controllers/authController');
 
-router.post('/register', ctrl.register);
-router.post('/login', ctrl.login);
-router.post('/refresh', ctrl.refresh);
-router.post('/logout', ctrl.logout);
+// auth endpoints (already added)
+router.post('/register', authCtrl.register);
+router.post('/login', authCtrl.login);
+router.post('/refresh', authCtrl.refresh);
+router.post('/logout', authCtrl.logout);
 
-router.get('/me', auth(), async (req, res) => {
-  // return minimal user
-  const User = require('../models/User');
-  const u = await User.findById(req.userId).select('_id email name city area avatar');
-  res.json(u);
-});
+// session
+router.get('/me', auth(), ctrl.me);
+
+// ✅ users
+router.get('/', auth(), ctrl.listUsers);
+
+// ✅ social
+router.get('/:userId/friends', auth(), ctrl.getFriends);
+router.get('/:userId/friend-requests', auth(), ctrl.getFriendRequests);
+router.post('/:targetId/follow', auth(), ctrl.follow);
+router.post('/:targetId/unfollow', auth(), ctrl.unfollow);
 
 module.exports = router;
