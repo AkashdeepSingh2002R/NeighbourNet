@@ -1,11 +1,15 @@
-// controllers/communityController.js
+// server/controllers/communityController.js
 const Community = require('../models/Community');
 const Post = require('../models/Post');
 
 const create = async (req, res) => {
   const { name, description, street, postal, image } = req.body;
   const c = await Community.create({
-    name, description, street, postal, image,
+    name,
+    description,
+    street,
+    postal,
+    image,
     creator: req.userId,
     members: [req.userId],
   });
@@ -37,7 +41,7 @@ const feed = async (req, res) => {
   res.json(posts);
 };
 
-// ✅ NEW: get communities where the user is a member
+// ← added
 const userCommunities = async (req, res) => {
   const { userId } = req.params;
   const rows = await Community.find({ members: userId }).limit(100);

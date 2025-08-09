@@ -1,4 +1,4 @@
-// server/index.js (or server.js/app.js — whichever is your entry)
+// server/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -10,29 +10,33 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 
-/* ------------------------ TRUST PROXY FOR RENDER ------------------------ */
-// Needed so `secure: true` cookies are set when running behind Render/Netlify/etc.
+/* ------------------------ TRUST PROXY (Render/Netlify) ------------------------ */
 app.set('trust proxy', 1);
 
-/* -------------------------- ORIGIN WHITELIST --------------------------- */
+/* --------------------------------- CORS --------------------------------- */
 const ORIGINS = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 
-// helpful log on boot
 console.log('[CORS] Allowed origins:', ORIGINS);
+
+const corsOptions = {
+  origin: ORIGINS,
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // preflight
 
 /* ------------------------------ SOCKET.IO ------------------------------ */
 const io = new Server(server, {
-  cors: {
-    origin: ORIGINS,
-    credentials: true,
-  },
+  cors: { origin: ORIGINS, credentials: true },
 });
 app.set('io', io);
 
-// simple presence (optional)
 const online = new Map();
 io.on('connection', (socket) => {
   const { userId } = socket.handshake.auth || {};
@@ -49,21 +53,6 @@ io.on('connection', (socket) => {
 });
 
 /* ------------------------------ MIDDLEWARE ----------------------------- */
-// CORS must be before routes
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // allow no-origin requests (curl, mobile apps) and whitelisted origins
-      if (!origin || ORIGINS.includes(origin)) return cb(null, true);
-      return cb(new Error('Not allowed by CORS'), false);
-    },
-    credentials: true,
-  })
-);
-
-// Handle preflight on all routes
-app.options('*', cors({ origin: ORIGINS, credentials: true }));
-
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 
@@ -79,19 +68,23 @@ app.get('/api/health', (_, res) => res.json({ ok: true }));
 /* -------------------------------- ROUTES -------------------------------- */
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/posts', require('./routes/postRoutes'));
-app.use('/api/communities', require('./routes/communityRoutes')); // ensure user route added there
+app.use('/api/communities', require('./routes/communityRoutes')); // includes /user/:userId
 app.use('/api/messages', require('./routes/messageRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/search', require('./routes/searchRoutes'));
 app.use('/api/uploads', require('./routes/uploadRoutes'));
 
-/* ---------------------------- ERROR HANDLING ---------------------------- */
-// unify JSON errors (prevents HTML error pages)
+/* ---------------------------- ERROR HANDLER ----------------------------- */
 app.use((err, req, res, next) => {
   console.error('[Error]', err?.message || err);
   if (res.headersSent) return next(err);
-  const status = err.status || 500;
-  res.status(status).json({ message: err.message || 'Server error' });
+  res.status(err.status || 500).json({ message: err.message || 'Server error' });
+});
+
+/* ----------------------------- CATCH-ALL 404 ---------------------------- */
+// Express 5-safe catch-all (avoid app.get('*', ...))
+app.use((req, res) => {
+  res.status(404).json({ message: 'Not found' });
 });
 
 /* --------------------------------- BOOT -------------------------------- */
