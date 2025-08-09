@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import api from '../api/axios';
+import api, { getSocketBase } from '../api/axios';
 import { io } from 'socket.io-client';
 import { Link } from 'react-router-dom';
 
@@ -23,7 +23,7 @@ export default function Messages() {
   // Connect socket when a chat is selected
   useEffect(() => {
     if (!withUser) return;
-    const base = (import.meta.env.VITE_API_URL || '').replace('/api', '');
+    const base = getSocketBase();
     const s = io(base || 'http://localhost:5000', {
       withCredentials: true,
       transports: ['websocket', 'polling'],
