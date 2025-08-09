@@ -32,7 +32,7 @@ export default function App() {
       element: <Layout onLogout={handleLogout} />,
       children: [
         { index: true, element: user ? <Navigate to="/home" replace /> : <Navigate to="/welcome" replace /> },
-        { path: "welcome", element: <LandingLogin setUser={setUser} /> },
+        { path: "welcome", element: <LandingLogin onLogin={setUser} /> },
         { path: "home", element: (
             <ProtectedRoute user={user}>
               <Home />

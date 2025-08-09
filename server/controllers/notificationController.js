@@ -1,4 +1,4 @@
-﻿const Notification = require('../models/Notification');
+const Notification = require('../models/Notification');
 
 const list = async (req, res) => {
   const rows = await Notification.find({ user: req.userId }).sort({ createdAt: -1 }).limit(50).populate('from','name avatar');

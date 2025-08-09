@@ -1,18 +1,9 @@
-﻿// server/controllers/communityController.js
 const Community = require('../models/Community');
 const Post = require('../models/Post');
 
 const create = async (req, res) => {
   const { name, description, street, postal, image } = req.body;
-  const c = await Community.create({
-    name,
-    description,
-    street,
-    postal,
-    image,
-    creator: req.userId,
-    members: [req.userId],
-  });
+  const c = await Community.create({ name, description, street, postal, image, creator: req.userId, members: [req.userId] });
   res.json(c);
 };
 
@@ -35,17 +26,8 @@ const leave = async (req, res) => {
 
 const feed = async (req, res) => {
   const id = req.params.id;
-  const posts = await Post.find({ communityId: id, deletedAt: null })
-    .sort({ _id: -1 })
-    .limit(50);
+  const posts = await Post.find({ communityId: id, deletedAt: null }).sort({ _id: -1 }).limit(50);
   res.json(posts);
 };
 
-// â† added
-const userCommunities = async (req, res) => {
-  const { userId } = req.params;
-  const rows = await Community.find({ members: userId }).limit(100);
-  res.json(rows);
-};
-
-module.exports = { create, list, join, leave, feed, userCommunities };
+module.exports = { create, list, join, leave, feed };

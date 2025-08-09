@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const { auth } = require('../middleware/auth');
 const { searchAll } = require('../controllers/searchController');
 

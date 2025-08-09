@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const { auth } = require('../middleware/auth');
 const { strictLimiter } = require('../utils/limits');
 const { createPost, getFeed, toggleLike, comment, toggleBookmark, updatePost, deletePost, trending } = require('../controllers/postController');

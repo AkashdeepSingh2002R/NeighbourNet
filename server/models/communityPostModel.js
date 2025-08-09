@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const communityPostSchema = new mongoose.Schema({
   communityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Community' },

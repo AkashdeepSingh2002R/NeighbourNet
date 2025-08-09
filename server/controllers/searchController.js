@@ -1,4 +1,4 @@
-﻿const User = require('../models/User');
+const User = require('../models/User');
 const Post = require('../models/Post');
 const Community = require('../models/Community');
 
