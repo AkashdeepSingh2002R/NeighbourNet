@@ -1,16 +1,18 @@
 import axios from 'axios';
 
-let BASE =
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  '/api'; // use same-origin path both locally (via Vite proxy) and on Netlify (via netlify.toml)
+// Use env or default to same-origin '/api'
+export const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-export const API_BASE = BASE;
-export const getSocketBase = () => (API_BASE || '').replace(/\/?api\/?$/, '');
+// Socket base: if API_BASE is absolute (http...), strip '/api'.
+// If it's relative ('/api'), use the current origin so socket is same-origin too.
+export const getSocketBase = () => {
+  if (/^https?:\/\//.test(API_BASE)) return API_BASE.replace(/\/?api\/?$/, '');
+  return window.location.origin;
+};
 
 const api = axios.create({
   baseURL: API_BASE,
-  withCredentials: true, // keep cookies
+  withCredentials: true, // keep cookies on all requests
 });
 
 export default api;

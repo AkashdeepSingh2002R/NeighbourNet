@@ -1,4 +1,3 @@
-// server/middleware/auth.js
 const jwt = require('jsonwebtoken');
 
 /**
@@ -8,19 +7,18 @@ const jwt = require('jsonwebtoken');
  */
 function auth(required = true) {
   return function (req, res, next) {
-    const token = req.cookies?.accessToken; // <-- MUST match the cookie you set
+    const token = req.cookies?.accessToken; // MUST match userController cookie name
     if (!token) {
       if (required) return res.status(401).json({ message: 'Not authenticated' });
       return next();
     }
-
     try {
       const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
       req.userId = payload.sub || payload.id || payload.userId;
-      return next();
-    } catch (err) {
+      next();
+    } catch {
       if (required) return res.status(401).json({ message: 'Invalid or expired token' });
-      return next();
+      next();
     }
   };
 }

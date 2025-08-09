@@ -1,4 +1,3 @@
-// server/controllers/userController.js
 const User = require('../models/User');
 const bcrypt = require('bcrypt'); // or 'bcryptjs' if that's what you installed
 const jwt = require('jsonwebtoken');
@@ -23,7 +22,7 @@ function setAuthCookies(res, { accessToken, refreshToken }) {
   const base = {
     httpOnly: true,
     sameSite: isProd ? 'none' : 'lax',
-    secure:   isProd, // true in prod so cookies are sent over HTTPS
+    secure:   isProd,
     path: '/',
   };
   res.cookie('accessToken',  accessToken,  { ...base, maxAge: 15 * 60 * 1000 });
@@ -148,7 +147,6 @@ const unfollow = async (req, res) => {
 };
 
 const listSuggestions = async (req, res) => {
-  // Works even when auth(false) was used (no req.userId)
   let excluding = [];
   if (req.userId) {
     const me = await User.findById(req.userId).select('following').lean();
@@ -183,7 +181,6 @@ const getFriends = async (req, res) => {
   const me = await User.findById(userId).select('following').lean();
   if (!me) return res.status(404).json({ message: 'User not found' });
 
-  // friends = mutual follows
   const friends = await User.find({
     _id: { $in: me.following },
     followers: userId
@@ -197,7 +194,6 @@ const getFriendRequests = async (req, res) => {
   const me = await User.findById(userId).select('following').lean();
   if (!me) return res.status(404).json({ message: 'User not found' });
 
-  // requests = they follow you but you don't follow back
   const requests = await User.find({
     following: userId,
     _id: { $nin: me.following }

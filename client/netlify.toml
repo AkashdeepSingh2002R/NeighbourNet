@@ -8,3 +8,8 @@
   status = 200
   force = true
   headers = { X-Forwarded-Host = ":host" }
+[[redirects]]
+  from = "/socket.io/*"
+  to = "https://neighbournet-42ys.onrender.com/socket.io/:splat"
+  status = 200
+  force = true
