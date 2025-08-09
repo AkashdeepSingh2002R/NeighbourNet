@@ -1,3 +1,1 @@
-# client/public/_redirects
-/api/*  https://neighbournet-42ys.onrender.com/api/:splat  200
-/*      /index.html  200
+/* /index.html 200

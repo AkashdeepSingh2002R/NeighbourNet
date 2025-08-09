@@ -1,23 +1,25 @@
-// src/api/axios.js
-import axios from "axios";
+// client/src/api/axios.js
+import axios from 'axios';
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  "https://neighbournet-42ys.onrender.com";
+let BASE =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  '/api'; // assumes same-origin proxy in dev
+
+const isBrowser = typeof window !== 'undefined';
+
+// Netlify fallback: if no env and you're on Netlify domain, use Render API
+if ((BASE === '/api' || !BASE) && isBrowser && /netlify\.app$/.test(window.location.hostname)) {
+  console.warn('[axios] No VITE_API_URL set on Netlify; falling back to Render backend');
+  BASE = 'https://neighbournet-42ys.onrender.com/api';
+}
+
+export const API_BASE = BASE;
+export const getSocketBase = () => (API_BASE || '').replace(/\/?api\/?$/, '');
 
 const api = axios.create({
-  baseURL: API_BASE.replace(/\/$/, ""),
-  withCredentials: false,
-});
-
-api.interceptors.request.use((config) => {
-  try {
-    const u = JSON.parse(localStorage.getItem("user"));
-    const token = u?.token || u?.accessToken || u?.jwt;
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-  } catch {}
-  return config;
+  baseURL: API_BASE,
+  withCredentials: true, // REQUIRED for cookies
 });
 
 export default api;
-export const getSocketBase = () => API_BASE;

@@ -1,3 +1,4 @@
+// server/routes/userRoutes.js
 const express = require('express');
 const { auth } = require('../middleware/auth');
 const { authLimiter } = require('../utils/limits');
@@ -20,10 +21,11 @@ router.post('/logout', logout);
 // Profile / Social
 router.patch('/me', auth(), updateProfile);
 
-// NOTE: to support your legacy Home.jsx even if cookie auth isn't set yet,
-// we’ll allow these via auth(false) and rely on :id param for now.
+// Friend / follow flows (require auth)
 router.post('/:id/follow', auth(), follow);
 router.post('/:id/unfollow', auth(), unfollow);
+
+// Public/legacy-compatible endpoints
 router.get('/suggestions', auth(false), listSuggestions);
 router.get('/search', auth(false), searchUsers);
 
