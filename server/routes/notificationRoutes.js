@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const { auth } = require('../middleware/auth');
 const { list, markAllRead } = require('../controllers/notificationController');
 

@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const { auth } = require('../middleware/auth');
 const { authLimiter } = require('../utils/limits');
 const {
@@ -21,7 +21,7 @@ router.post('/logout', logout);
 router.patch('/me', auth(), updateProfile);
 
 // NOTE: to support your legacy Home.jsx even if cookie auth isn't set yet,
-// we’ll allow these via auth(false) and rely on :id param for now.
+// weâ€™ll allow these via auth(false) and rely on :id param for now.
 router.post('/:id/follow', auth(false), follow);
 router.post('/:id/unfollow', auth(false), unfollow);
 router.get('/suggestions', auth(false), listSuggestions);

@@ -1,4 +1,4 @@
-// server/models/CommunityPost.js
+﻿// server/models/CommunityPost.js
 const mongoose = require('mongoose');
 
 const CommunityPostSchema = new mongoose.Schema(

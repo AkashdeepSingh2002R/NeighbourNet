@@ -1,4 +1,4 @@
-// server/controllers/communityController.js
+﻿// server/controllers/communityController.js
 const Community = require('../models/Community');
 const Post = require('../models/Post');
 
@@ -41,7 +41,7 @@ const feed = async (req, res) => {
   res.json(posts);
 };
 
-// ← added
+// â† added
 const userCommunities = async (req, res) => {
   const { userId } = req.params;
   const rows = await Community.find({ members: userId }).limit(100);
