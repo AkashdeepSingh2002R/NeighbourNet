@@ -1,35 +1,18 @@
 ﻿const express = require('express');
-const { auth } = require('../middleware/auth');
-const { authLimiter } = require('../utils/limits');
-const {
-  register, login, me, refresh, logout, updateProfile,
-  follow, unfollow, listSuggestions, searchUsers,
-  listUsers, getFriends, getFriendRequests
-} = require('../controllers/userController');
-
 const router = express.Router();
+const { auth } = require('../middleware/auth');
+const ctrl = require('../controllers/authController');
 
-// Auth
-router.post('/register', authLimiter, register);
-router.post('/login', authLimiter, login);
-router.get('/me', auth(), me);
-router.put('/me', auth(), updateProfile);
-router.post('/refresh', refresh);
-router.post('/logout', logout);
+router.post('/register', ctrl.register);
+router.post('/login', ctrl.login);
+router.post('/refresh', ctrl.refresh);
+router.post('/logout', ctrl.logout);
 
-// Profile / Social
-router.patch('/me', auth(), updateProfile);
-
-// NOTE: to support your legacy Home.jsx even if cookie auth isn't set yet,
-// weâ€™ll allow these via auth(false) and rely on :id param for now.
-router.post('/:id/follow', auth(false), follow);
-router.post('/:id/unfollow', auth(false), unfollow);
-router.get('/suggestions', auth(false), listSuggestions);
-router.get('/search', auth(false), searchUsers);
-
-// Legacy compatibility for Home.jsx
-router.get('/', auth(false), listUsers);
-router.get('/:id/friends', auth(false), getFriends);
-router.get('/:id/friend-requests', auth(false), getFriendRequests);
+router.get('/me', auth(), async (req, res) => {
+  // return minimal user
+  const User = require('../models/User');
+  const u = await User.findById(req.userId).select('_id email name city area avatar');
+  res.json(u);
+});
 
 module.exports = router;

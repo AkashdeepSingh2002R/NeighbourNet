@@ -1,22 +1,19 @@
 ﻿const jwt = require('jsonwebtoken');
 
-function auth(required = true) {
+function auth() {
   return (req, res, next) => {
-    const token = req.cookies?.at;
-    if (!token) {
-      if (required) return res.status(401).json({ message: 'Not authenticated' });
-      req.userId = null;
-      return next();
-    }
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-      req.userId = payload.sub;
+      const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      const token = req.cookies?.accessToken || bearer;
+      if (!token) return res.status(401).json({ message: 'Unauthorized' });
+      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+      req.userId = payload?.sub || payload?.id || payload?._id;
+      if (!req.userId) return res.status(401).json({ message: 'Unauthorized' });
       next();
-    } catch (e) {
-      if (required) return res.status(401).json({ message: 'Invalid token' });
-      req.userId = null;
-      next();
+    } catch {
+      return res.status(401).json({ message: 'Unauthorized' });
     }
-  }
+  };
 }
+
 module.exports = { auth };
