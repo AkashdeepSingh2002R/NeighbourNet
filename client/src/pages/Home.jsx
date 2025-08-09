@@ -15,16 +15,10 @@ export default function Home({ onLogout }) {
   const [newPost, setNewPost] = useState('');
   const [preview, setPreview] = useState(null);
 
-  // Weather summary (read from localStorage if WeatherHero saves it, else show fallback)
-  const [weather, setWeather] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('weather_summary') || 'null'); } catch { return null; }
-  });
-
   const s = (v) => (v ?? '').toString();
   const arr = (v) => (Array.isArray(v) ? v : []);
 
   useEffect(() => {
-    // Try cookie auth /me (upgrade pack), else fallback to localStorage user
     api.get('/users/me')
       .then(({ data }) => {
         setCurrentUser(data);
@@ -39,14 +33,6 @@ export default function Home({ onLogout }) {
           }
         } catch {}
       });
-
-    // Listen for a custom event WeatherHero can dispatch: window.dispatchEvent(new CustomEvent('weather:update', { detail }))
-    const onWeather = (e) => {
-      setWeather(e.detail);
-      try { localStorage.setItem('weather_summary', JSON.stringify(e.detail)); } catch {}
-    };
-    window.addEventListener('weather:update', onWeather);
-    return () => window.removeEventListener('weather:update', onWeather);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -129,36 +115,16 @@ export default function Home({ onLogout }) {
     }
   };
 
-  const confirmedFriendIds = friends.map((f) => f._id);
-  const displayName =
-    s(currentUser?.name) ||
-    s((() => { try { return JSON.parse(localStorage.getItem('user') || '{}')?.name; } catch { return ''; } })());
-
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
-      
-
-      {/* ===== Welcome + quick weather ===== */}
+      {/* ===== Single Welcome with Weather (right card kept) ===== */}
       <header className="max-w-6xl mx-auto px-6 pt-8">
         <div className="bg-white rounded-xl shadow px-6 py-5 flex flex-col gap-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold">
-                {displayName ? `Welcome, ${displayName}` : 'Welcome'}
-              </h1>
-              <p className="text-sm text-gray-600">
-                {weather
-                  ? `Weather: ${weather.city || ''} ${weather.temp ?? ''}°C, ${weather.desc || ''}`
-                  : 'Weather: updating…'}
-              </p>
-            </div>
-            {/* Keep your existing component on the right; it can set localStorage or dispatch the event */}
-            <div className="w-full md:w-auto">
-              <WeatherHero />
-            </div>
+          <div className="w-full">
+            <WeatherHero />
           </div>
 
-          {/* Quick actions to new features */}
+          {/* Quick actions */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Link to="/profile" className="bg-[#e8f4e1] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
               Profile
@@ -176,11 +142,12 @@ export default function Home({ onLogout }) {
         </div>
       </header>
 
-      {/* Optional: keep your existing action tiles row */}
+      {/* Action tiles */}
       <section className="max-w-6xl mx-auto px-6 mt-6">
         <ActionTiles />
       </section>
 
+      {/* Main */}
       <main className="max-w-6xl mx-auto px-6 py-8 flex flex-col md:flex-row gap-8">
         {/* Posts and New Post Form */}
         <section className="flex-1 space-y-6">
@@ -305,8 +272,6 @@ export default function Home({ onLogout }) {
           </div>
         </aside>
       </main>
-
-      
     </div>
   );
 }
