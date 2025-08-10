@@ -1,22 +1,17 @@
-const User = require('../models/User');
-const bcrypt = require('bcrypt'); // or 'bcryptjs' if that's what you installed
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-/* -------------------- token helpers -------------------- */
+const ACCESS_TTL_MS  = 15 * 60 * 1000;        // 15m
+const REFRESH_TTL_MS = 7  * 24 * 60 * 60 * 1000; // 7d
+
 function signAccessToken(userId) {
-  return jwt.sign(
-    { sub: String(userId) },
-    process.env.JWT_ACCESS_SECRET,
-    { expiresIn: '15m' }
-  );
+  return jwt.sign({ sub: String(userId) }, process.env.JWT_ACCESS_SECRET, { expiresIn: '15m' });
 }
 function signRefreshToken(userId) {
-  return jwt.sign(
-    { sub: String(userId), type: 'refresh' },
-    process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET,
-    { expiresIn: '7d' }
-  );
+  return jwt.sign({ sub: String(userId), type: 'refresh' }, process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET, { expiresIn: '7d' });
 }
+
 function setAuthCookies(res, { accessToken, refreshToken }) {
   const isProd = process.env.NODE_ENV === 'production';
   const base = {
@@ -25,14 +20,13 @@ function setAuthCookies(res, { accessToken, refreshToken }) {
     secure:   isProd,
     path: '/',
   };
-  res.cookie('accessToken',  accessToken,  { ...base, maxAge: 15 * 60 * 1000 });
-  res.cookie('refreshToken', refreshToken, { ...base, maxAge: 7  * 24 * 60 * 60 * 1000 });
+  res.cookie('accessToken',  accessToken,  { ...base, maxAge: ACCESS_TTL_MS });
+  res.cookie('refreshToken', refreshToken, { ...base, maxAge: REFRESH_TTL_MS });
 }
 
-/* ----------------------- auth -------------------------- */
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body || {};
     if (!name || !email || !password) return res.status(400).json({ message: 'Missing fields' });
 
     const exists = await User.findOne({ email });
@@ -54,7 +48,7 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
 
@@ -73,6 +67,7 @@ const login = async (req, res) => {
 };
 
 const me = async (req, res) => {
+  if (!req.userId) return res.status(401).json({ message: 'Not authenticated' });
   const user = await User.findById(req.userId).select('-password');
   if (!user) return res.status(404).json({ message: 'User not found' });
   res.json(user);
@@ -83,13 +78,8 @@ const refresh = async (req, res) => {
     const token = req.cookies?.refreshToken;
     if (!token) return res.status(401).json({ message: 'No refresh token' });
 
-    const payload = jwt.verify(
-      token,
-      process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET
-    );
-    if (payload.type !== 'refresh') {
-      return res.status(401).json({ message: 'Bad refresh token' });
-    }
+    const payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET, { clockTolerance: 60 });
+    if (payload.type !== 'refresh') return res.status(401).json({ message: 'Bad refresh token' });
 
     const at = signAccessToken(payload.sub);
     const rt = signRefreshToken(payload.sub);
@@ -108,18 +98,12 @@ const logout = (_req, res) => {
   res.json({ ok: true });
 };
 
-/* ----------------- profile / social -------------------- */
 const updateProfile = async (req, res) => {
   const allowed = ['name','avatar','cover','bio','city','area','postalCode','links','private'];
   const patch = {};
   for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
 
-  const user = await User.findByIdAndUpdate(
-    req.userId,
-    { $set: patch },
-    { new: true }
-  ).select('-password');
-
+  const user = await User.findByIdAndUpdate(req.userId, { $set: patch }, { new: true }).select('-password');
   res.json(user);
 };
 
@@ -167,7 +151,6 @@ const searchUsers = async (req, res) => {
   res.json(users);
 };
 
-/* ---------------- legacy (friends model) --------------- */
 const listUsers = async (_req, res) => {
   const users = await User.find({})
     .select('name avatar city area followers following createdAt')

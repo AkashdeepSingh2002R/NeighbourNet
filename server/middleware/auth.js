@@ -1,13 +1,8 @@
 const jwt = require('jsonwebtoken');
 
-/**
- * auth(required = true)
- * - If required=true (default): missing/invalid token -> 401
- * - If required=false: continue even if unauthenticated (req.userId stays undefined)
- */
 function auth(required = true) {
   return function (req, res, next) {
-    const token = req.cookies?.accessToken; // MUST match userController cookie name
+    const token = req.cookies?.accessToken; // MUST match cookie name set above
     if (!token) {
       if (required) return res.status(401).json({ message: 'Not authenticated' });
       return next();

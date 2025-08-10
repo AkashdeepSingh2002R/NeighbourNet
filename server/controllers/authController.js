@@ -3,48 +3,48 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const ACCESS_TTL_MS  = 15 * 60 * 1000;            // 15 minutes
-const REFRESH_TTL_MS = 7  * 24 * 60 * 60 * 1000;  // 7 days
+const ACCESS_TTL_MS = 1000 * 60 * 15;           // 15m
+const REFRESH_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7d
 
 function signAccessToken(userId) {
-  // Use ONE secret consistently across sign + verify
-  return jwt.sign({ sub: userId }, process.env.JWT_ACCESS_SECRET, { expiresIn: '15m' });
+  return jwt.sign({ sub: String(userId) }, process.env.JWT_SECRET, { expiresIn: '15m' });
 }
 function signRefreshToken(userId) {
-  return jwt.sign({ sub: userId, type: 'refresh' }, process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ sub: String(userId), type: 'refresh' }, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
-function setAuthCookies(res, { accessToken, refreshToken }) {
+function setAuthCookies(res, { at, rt }) {
   const isProd = process.env.NODE_ENV === 'production';
-  const base = {
+
+  // For Netlify(frontend) + Render(backend) on separate domains we need SameSite=None + Secure
+  const common = {
     httpOnly: true,
-    secure:   isProd,           // true on Render/production so cookies are set over HTTPS
+    secure: isProd,           // must be true in prod (HTTPS)
     sameSite: isProd ? 'none' : 'lax',
-    path: '/',
+    path: '/',                // send cookie to all routes
   };
 
-  // IMPORTANT: these names must match middleware
-  res.cookie('accessToken',  accessToken,  { ...base, maxAge: ACCESS_TTL_MS  });
-  res.cookie('refreshToken', refreshToken, { ...base, maxAge: REFRESH_TTL_MS });
+  res.cookie('at', at, { ...common, maxAge: ACCESS_TTL_MS });
+  res.cookie('rt', rt, { ...common, maxAge: REFRESH_TTL_MS });
 }
 
 exports.register = async (req, res) => {
   try {
     const { email, password, name } = req.body;
     const existing = await User.findOne({ email });
-    if (existing) return res.status(400).json({ message: 'Email already in use' });
+    if (existing) return res.status(409).json({ message: 'Email already in use' });
 
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ email, password: hash, name });
 
-    const at = signAccessToken(user._id.toString());
-    const rt = signRefreshToken(user._id.toString());
-    setAuthCookies(res, { accessToken: at, refreshToken: rt });
+    const at = signAccessToken(user._id);
+    const rt = signRefreshToken(user._id);
+    setAuthCookies(res, { at, rt });
 
+    // No redirect; return JSON so Set-Cookie survives on mobile
     res.status(201).json({ user: { _id: user._id, email: user.email, name: user.name } });
   } catch (e) {
-    console.error('register error:', e);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Registration failed' });
   }
 };
 
@@ -57,37 +57,36 @@ exports.login = async (req, res) => {
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
 
-    const at = signAccessToken(user._id.toString());
-    const rt = signRefreshToken(user._id.toString());
-    setAuthCookies(res, { accessToken: at, refreshToken: rt });
+    const at = signAccessToken(user._id);
+    const rt = signRefreshToken(user._id);
+    setAuthCookies(res, { at, rt });
 
     res.json({ user: { _id: user._id, email: user.email, name: user.name } });
   } catch (e) {
-    console.error('login error:', e);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Login failed' });
   }
+};
+
+exports.me = async (req, res) => {
+  // Expect req.user set by auth middleware (reads 'at' cookie)
+  if (!req.user) return res.status(401).json({ message: 'Not authenticated' });
+  res.json({ user: req.user });
 };
 
 exports.refresh = async (req, res) => {
   try {
-    const token = req.cookies?.refreshToken;
-    if (!token) return res.status(401).json({ message: 'No refresh token' });
+    const { rt } = req.cookies || {};
+    if (!rt) return res.status(401).json({ message: 'Missing refresh token' });
 
-    const payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET || process.env.JWT_ACCESS_SECRET);
+    const payload = jwt.verify(rt, process.env.JWT_SECRET, { clockTolerance: 60 }); // tolerate 60s skew
+    if (payload.type !== 'refresh') return res.status(401).json({ message: 'Invalid token' });
+
     const at = signAccessToken(payload.sub);
-    const rt = signRefreshToken(payload.sub);
+    const newRt = signRefreshToken(payload.sub);
+    setAuthCookies(res, { at, rt: newRt });
 
-    setAuthCookies(res, { accessToken: at, refreshToken: rt });
     res.json({ ok: true });
   } catch (e) {
-    console.error('refresh error:', e);
-    res.status(401).json({ message: 'Invalid refresh token' });
+    res.status(401).json({ message: 'Refresh failed' });
   }
-};
-
-exports.logout = async (_req, res) => {
-  // Clear cookies
-  res.clearCookie('accessToken',  { path: '/' });
-  res.clearCookie('refreshToken', { path: '/' });
-  res.json({ ok: true });
 };
