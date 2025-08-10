@@ -1,0 +1,12 @@
+PATCH CONTENTS
+- client/src/api/axios.js
+- client/.env.production
+- client/public/_redirects
+- server/server.js
+- server/routes/userRoutes.js
+- server/controllers/userController.cookies.PATCH.js
+- server/package.json
+- README_DEPLOY.txt
+
+FILES TO DELETE (manually):
+- server/controllers/authController.js

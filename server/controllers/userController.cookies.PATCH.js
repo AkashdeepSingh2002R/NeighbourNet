@@ -11,8 +11,8 @@ function computeCookieOptions(req) {
   if (isProd && isHttps) {
     return {
       httpOnly: true,
-      sameSite: 'none',
-      secure: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
       path: '/'
     };
   }
@@ -20,8 +20,8 @@ function computeCookieOptions(req) {
   // Dev local defaults: same-site so cookies work without cross-site rules
   return {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: false,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
     path: '/'
   };
 }
