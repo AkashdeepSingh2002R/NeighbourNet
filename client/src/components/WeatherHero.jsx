@@ -113,7 +113,7 @@ export default function WeatherHero({ onThemeChange /*, city (ignored) */ }) {
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#2f4430]">
-            Welcome back{user?.name ? `, ${user.name}` : ''}
+            Welcome {user?.name ? `, ${user.name}` : ''}
           </h1>
           <p className="text-[#4b5e4a] text-sm mt-1">
             {place || (err ? '—' : 'Detecting your location…')}

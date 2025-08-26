@@ -17,9 +17,9 @@ import Profile from "./pages/Profile";
 import Explore from "./pages/Explore";
 import Messages from "./pages/Messages";
 import Notifications from "./pages/Notifications";
+import Events from "./pages/Events"; // ✅ NEW
 
 export default function App() {
-  // 1) Synchronously hydrate from localStorage so first render already has the user (if stored)
   const [user, setUser] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("user") || "null");
@@ -29,22 +29,19 @@ export default function App() {
     }
   });
 
-  // 2) While we confirm with backend, keep boot=true so guards don't redirect
   const [boot, setBoot] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // If you use cookie sessions, this confirms the session on refresh.
-        // If you use JWT, the axios interceptor (Authorization header) will be sent too.
         const { data } = await api.get("/users/me");
         if (!cancelled && data?._id) {
           setUser(data);
           try { localStorage.setItem("user", JSON.stringify(data)); } catch {}
         }
       } catch {
-        // If /me fails, keep whatever we had from localStorage. You can force logout here if you want.
+        // keep localStorage user if present
       } finally {
         if (!cancelled) setBoot(false);
       }
@@ -57,7 +54,6 @@ export default function App() {
     setUser(null);
   };
 
-  // router
   const router = createBrowserRouter([
     { path: "/welcome", element: <LandingLogin onLogin={(u) => {
         setUser(u);
@@ -68,7 +64,6 @@ export default function App() {
       path: "/",
       element: <Layout onLogout={handleLogout} />,
       children: [
-        // Redirect root only AFTER boot; otherwise you may bounce to /welcome prematurely
         {
           index: true,
           element: boot
@@ -102,6 +97,11 @@ export default function App() {
         },
         { path: "notifications", element:
           <ProtectedRoute user={user} boot={boot}><Notifications /></ProtectedRoute>
+        },
+
+       
+        { path: "events", element:
+          <ProtectedRoute user={user} boot={boot}><Events /></ProtectedRoute>
         },
       ],
     },
