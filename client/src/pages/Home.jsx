@@ -1,5 +1,4 @@
-// client/src/pages/Home.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -20,23 +19,23 @@ export default function Home({ onLogout }) {
   const [preview, setPreview] = useState(null);
   const [friendMenuFor, setFriendMenuFor] = useState(null);
 
+  // live polling control
+  const pollTimer = useRef(null);
+
   const s = (v) => (v ?? '').toString();
   const arr = (v) => (Array.isArray(v) ? v : []);
-
-  // ---------- Helpers ----------
   const idOf = (objOrId) => s(objOrId?._id ?? objOrId ?? '');
 
   const normalizeAuthor = (post, me, usersMap) => {
     const aid = idOf(post.author);
-    // prefer populated author from server
-    if (post.author && post.author.name) return post;
-    // try users list
-    const fromUsers = usersMap.get(aid);
+    if (post.author && post.author.name) return post;                 // populated
+    const fromUsers = usersMap.get(aid);                               // from /users cache
     if (fromUsers) return { ...post, author: { _id: fromUsers._id, name: fromUsers.name } };
-    // if it's me
-    if (aid && aid === s(me?._id)) return { ...post, author: { _id: me._id, name: me.name } };
-    // fallback to existing shape (may show empty name)
-    return { ...post, author: post.author ? { _id: aid, name: post.author.name || '' } : { _id: aid, name: '' } };
+    if (aid && aid === s(me?._id)) return { ...post, author: { _id: me._id, name: me.name } }; // me
+    return {
+      ...post,
+      author: post.author ? { _id: aid, name: post.author.name || '' } : { _id: aid, name: '' },
+    };
   };
 
   const filterFeedToFriendsAndMe = (items, friendIds, meId) => {
@@ -46,20 +45,31 @@ export default function Home({ onLogout }) {
 
   // ---------- Bootstrap ----------
   useEffect(() => {
-    api.get('/users/me')
-      .then(({ data }) => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data } = await api.get('/users/me');
+        if (cancelled) return;
         setCurrentUser(data);
-        bootstrap(data);
-      })
-      .catch(() => {
+        await bootstrap(data);
+        startLivePolling(data._id); // start after first bootstrap
+      } catch {
         try {
           const ls = JSON.parse(localStorage.getItem('user') || 'null');
-          if (ls?._id) {
+          if (ls?._id && !cancelled) {
             setCurrentUser(ls);
-            bootstrap(ls);
+            await bootstrap(ls);
+            startLivePolling(ls._id);
           }
         } catch {}
-      });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      stopLivePolling();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -68,84 +78,123 @@ export default function Home({ onLogout }) {
     const meId = typeof meOrId === 'string' ? meOrId : meOrId?._id;
     if (!meId) return;
 
-    try {
-      const [usersRes, incomingRes, feedRes, meRes] = await Promise.all([
-        api.get('/users'),
-        api.get(`/users/${meId}/friend-requests`), // incoming
-        api.get('/posts/feed', { params: { limit: 50 } }),
-        me ? Promise.resolve({ data: me }) : api.get('/users/me'),
-      ]);
+    const [usersRes, incomingRes, feedRes, meRes] = await Promise.all([
+      api.get('/users'),
+      api.get(`/users/${meId}/friend-requests`), // incoming
+      api.get('/posts/feed', { params: { limit: 50 } }),
+      me ? Promise.resolve({ data: me }) : api.get('/users/me'),
+    ]);
 
-      const allUsers     = arr(usersRes.data);
-      const incomingList = arr(incomingRes.data);
-      const meFull       = meRes.data || {};
-      const feed         = feedRes?.data || {};
+    const allUsers     = arr(usersRes.data);
+    const incomingList = arr(incomingRes.data);
+    const meFull       = meRes.data || {};
+    const feed         = feedRes?.data || {};
 
-      setUsers(allUsers);
-      setCurrentUser(meFull);
-      setFriendRequests(incomingList);
+    setUsers(allUsers);
+    setCurrentUser(meFull);
+    setFriendRequests(incomingList);
 
-      // --- compute mutual friends / outgoing ---
-      const followersIds = new Set(arr(meFull.followers).map(idOf));
-      const followingIds = new Set(arr(meFull.following).map(idOf));
-      const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
+    // --- compute mutual friends / outgoing ---
+    const followersIds = new Set(arr(meFull.followers).map(idOf));
+    const followingIds = new Set(arr(meFull.following).map(idOf));
+    const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
 
-      const usersById = new Map(allUsers.map((u) => [s(u._id), u]));
-      const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
-      setFriends(friendsComputed);
+    const usersById = new Map(allUsers.map((u) => [s(u._id), u]));
+    const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
+    setFriends(friendsComputed);
 
-      const incomingIds = new Set(incomingList.map((r) => s(r._id)));
-      const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
-      setOutgoingRequests(outgoing);
+    const incomingIds = new Set(incomingList.map((r) => s(r._id)));
+    const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
+    setOutgoingRequests(outgoing);
 
-      // --- posts: friends ∪ me ---
-      const friendIdSet = new Set([...mutualIds]);
-      const visible = filterFeedToFriendsAndMe(arr(feed.items), friendIdSet, meFull._id)
-        .map((p) => normalizeAuthor(p, meFull, usersById));
-      setPosts(visible);
-    } catch (err) {
-      console.error('Bootstrap load error:', err?.response?.data || err);
-    }
+    // --- posts: friends ∪ me ---
+    const friendIdSet = new Set([...mutualIds]);
+    const visible = filterFeedToFriendsAndMe(arr(feed.items), friendIdSet, meFull._id)
+      .map((p) => normalizeAuthor(p, meFull, usersById));
+    setPosts(visible);
   }
 
-  // Central refresher
+  // ------- Light polling (realtime-ish) -------
+  const startLivePolling = (meId) => {
+    stopLivePolling();
+    pollTimer.current = setInterval(() => {
+      lightRefresh(meId).catch(() => {});
+    }, 6000); // every 6s feels realtime enough; tune as you like
+  };
+
+  const stopLivePolling = () => {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  };
+
+  // Light refresh: only /users/me + friend-requests (skip posts/users to keep it cheap)
+  const lightRefresh = async (meIdParam) => {
+    const meId = meIdParam || currentUser?._id;
+    if (!meId) return;
+
+    const [{ data: meNew }, incomingRes] = await Promise.all([
+      api.get('/users/me'),
+      api.get(`/users/${meId}/friend-requests`),
+    ]);
+
+    // If nothing changed, bail early
+    const incomingList = arr(incomingRes.data);
+    const incomingIdsNew = incomingList.map((r) => s(r._id)).sort().join(',');
+    const incomingIdsOld = arr(friendRequests).map((r) => s(r._id)).sort().join(',');
+    const followersNew   = arr(meNew.followers).map(idOf).sort().join(',');
+    const followersOld   = arr(currentUser?.followers).map(idOf).sort().join(',');
+    const followingNew   = arr(meNew.following).map(idOf).sort().join(',');
+    const followingOld   = arr(currentUser?.following).map(idOf).sort().join(',');
+
+    const changed =
+      incomingIdsNew !== incomingIdsOld ||
+      followersNew   !== followersOld ||
+      followingNew   !== followingOld;
+
+    if (!changed) return;
+
+    setCurrentUser(meNew);
+    setFriendRequests(incomingList);
+
+    // Recompute mutual/outgoing using cached users list
+    const followersIds = new Set(arr(meNew.followers).map(idOf));
+    const followingIds = new Set(arr(meNew.following).map(idOf));
+    const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
+
+    const usersById    = new Map(arr(users).map((u) => [s(u._id), u]));
+    const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
+    setFriends(friendsComputed);
+
+    const incomingIds = new Set(incomingList.map((r) => s(r._id)));
+    const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
+    setOutgoingRequests(outgoing);
+  };
+
+  // Central (full) refresher when *we* do an action
   const refreshSocialState = async () => {
     if (!currentUser?._id) return;
-    try {
-      const [{ data: meNew }, usersRes, incomingRes, feedRes] = await Promise.all([
-        api.get('/users/me'),
-        api.get('/users'),
-        api.get(`/users/${currentUser._id}/friend-requests`),
-        api.get('/posts/feed', { params: { limit: 50 } }),
-      ]);
+    const [{ data: meNew }, incomingRes] = await Promise.all([
+      api.get('/users/me'),
+      api.get(`/users/${currentUser._id}/friend-requests`),
+    ]);
 
-      const allUsers     = arr(usersRes.data);
-      const incomingList = arr(incomingRes.data);
-      const feed         = feedRes?.data || {};
+    setCurrentUser(meNew);
+    const incomingList = arr(incomingRes.data);
+    setFriendRequests(incomingList);
 
-      setCurrentUser(meNew);
-      setUsers(allUsers);
-      setFriendRequests(incomingList);
+    const followersIds = new Set(arr(meNew.followers).map(idOf));
+    const followingIds = new Set(arr(meNew.following).map(idOf));
+    const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
 
-      const followersIds = new Set(arr(meNew.followers).map(idOf));
-      const followingIds = new Set(arr(meNew.following).map(idOf));
-      const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
+    const usersById    = new Map(arr(users).map((u) => [s(u._id), u]));
+    const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
+    setFriends(friendsComputed);
 
-      const usersById    = new Map(allUsers.map((u) => [s(u._id), u]));
-      const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
-      setFriends(friendsComputed);
-
-      const incomingIds = new Set(incomingList.map((r) => s(r._id)));
-      const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
-      setOutgoingRequests(outgoing);
-
-      const friendIdSet = new Set([...mutualIds]);
-      const visible = filterFeedToFriendsAndMe(arr(feed.items), friendIdSet, meNew._id)
-        .map((p) => normalizeAuthor(p, meNew, usersById));
-      setPosts(visible);
-    } catch (e) {
-      console.error('Refresh state error:', e?.response?.data || e);
-    }
+    const incomingIds = new Set(incomingList.map((r) => s(r._id)));
+    const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
+    setOutgoingRequests(outgoing);
   };
 
   // ---------- Actions ----------
@@ -181,11 +230,8 @@ export default function Home({ onLogout }) {
     const payload = { text: newPost, imageUrl: preview || '' };
     try {
       const { data } = await api.post('/posts', payload);
-
-      // Normalize returned post so author is my name immediately
-      const usersById = new Map(users.map((u) => [s(u._id), u]));
+      const usersById = new Map(arr(users).map((u) => [s(u._id), u]));
       const normalized = normalizeAuthor(data, currentUser, usersById);
-
       setNewPost(''); setPreview(null);
       setPosts((prev) => [normalized, ...prev]);
     } catch (e2) {
@@ -245,7 +291,6 @@ export default function Home({ onLogout }) {
             <button type="submit" className="bg-[#d4e7ba] px-4 py-2 rounded font-semibold text-sm">Post</button>
           </form>
 
-          {/* Header text changed here */}
           <h2 className="text-xl font-semibold">Posts</h2>
 
           {posts.length === 0 ? (
@@ -314,13 +359,10 @@ export default function Home({ onLogout }) {
                 .filter((u) => u._id !== (currentUser?._id || ''))
                 .map((user) => {
                   const id = s(user._id);
-                  const friendIds = new Set(friends.map((f) => s(f._id)));
-                  const incomingIdSet = new Set(friendRequests.map((r) => s(r._id)));
-                  const outgoingIdSet = new Set(outgoingRequests.map(s));
-
-                  const isFriend   = friendIds.has(id);
-                  const isIncoming = incomingIdSet.has(id);
-                  const isOutgoing = outgoingIdSet.has(id);
+                  const friendIds    = new Set(friends.map((f) => s(f._id)));
+                  const isFriend     = friendIds.has(id);
+                  const isIncoming   = new Set(friendRequests.map((r) => s(r._id))).has(id);
+                  const isOutgoing   = outgoingIdSet.has(id);
 
                   return (
                     <li key={id} className="flex items-center gap-3 relative">

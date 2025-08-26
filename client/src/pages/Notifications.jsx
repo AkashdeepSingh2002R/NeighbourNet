@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api from '../api/axios';
 
 export default function Notifications() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const pollTimer = useRef(null);
 
-  async function load() {
+  const load = async () => {
     setLoading(true);
     try {
       const { data } = await api.get('/notifications');
@@ -13,15 +14,37 @@ export default function Notifications() {
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  useEffect(() => { load(); }, []);
+  // Light polling + refresh on tab focus
+  useEffect(() => {
+    let cancelled = false;
+    (async () => { if (!cancelled) await load(); })();
+
+    // poll every 7s
+    pollTimer.current = setInterval(load, 7000);
+
+    // refresh when user re-focuses the tab
+    const onVis = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      cancelled = true;
+      if (pollTimer.current) clearInterval(pollTimer.current);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
+  const markAllRead = async () => {
+    await api.post('/notifications/read-all');
+    await load();
+  };
 
   return (
     <div className="max-w-3xl mx-auto p-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Notifications</h2>
-        <button className="border px-2 py-1 rounded" onClick={() => api.post('/notifications/read-all').then(load)}>
+        <button className="border px-2 py-1 rounded" onClick={markAllRead}>
           Mark all read
         </button>
       </div>
@@ -34,7 +57,7 @@ export default function Notifications() {
         </div>
       ) : (
         <ul className="mt-3 space-y-2">
-          {items.map(n => (
+          {items.map((n) => (
             <li key={n._id} className="bg-white p-3 rounded-xl shadow flex items-center gap-3">
               <div className="text-lg">
                 {n.type === 'like' && '👍'}
