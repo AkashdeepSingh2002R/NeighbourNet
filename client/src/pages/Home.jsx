@@ -11,27 +11,47 @@ export default function Home({ onLogout }) {
   const [posts, setPosts] = useState([]);
   const [users, setUsers] = useState([]);
 
-  const [friends, setFriends] = useState([]);                 // computed: mutual follows (NOT backend /friends)
-  const [friendRequests, setFriendRequests] = useState([]);   // incoming requests (they follow me)
-  const [outgoingRequests, setOutgoingRequests] = useState([]); // following − friends − incoming
+  // Social state (computed from /me)
+  const [friends, setFriends] = useState([]);                 // mutual follows only
+  const [friendRequests, setFriendRequests] = useState([]);   // incoming (they follow me)
+  const [outgoingRequests, setOutgoingRequests] = useState([]); // following − mutual − incoming
 
   const [newPost, setNewPost] = useState('');
   const [preview, setPreview] = useState(null);
-
-  const [friendMenuFor, setFriendMenuFor] = useState(null);   // which friend's popover is open
+  const [friendMenuFor, setFriendMenuFor] = useState(null);
 
   const s = (v) => (v ?? '').toString();
   const arr = (v) => (Array.isArray(v) ? v : []);
 
+  // ---------- Helpers ----------
+  const idOf = (objOrId) => s(objOrId?._id ?? objOrId ?? '');
+
+  const normalizeAuthor = (post, me, usersMap) => {
+    const aid = idOf(post.author);
+    // prefer populated author from server
+    if (post.author && post.author.name) return post;
+    // try users list
+    const fromUsers = usersMap.get(aid);
+    if (fromUsers) return { ...post, author: { _id: fromUsers._id, name: fromUsers.name } };
+    // if it's me
+    if (aid && aid === s(me?._id)) return { ...post, author: { _id: me._id, name: me.name } };
+    // fallback to existing shape (may show empty name)
+    return { ...post, author: post.author ? { _id: aid, name: post.author.name || '' } : { _id: aid, name: '' } };
+  };
+
+  const filterFeedToFriendsAndMe = (items, friendIds, meId) => {
+    const allowed = new Set([...friendIds, s(meId)]);
+    return arr(items).filter((p) => allowed.has(s(p.author?._id || p.author)));
+  };
+
+  // ---------- Bootstrap ----------
   useEffect(() => {
-    // Load session user (cookie/JWT) and bootstrap lists
     api.get('/users/me')
       .then(({ data }) => {
         setCurrentUser(data);
-        bootstrap(data); // pass full /me (has followers/following)
+        bootstrap(data);
       })
       .catch(() => {
-        // Fallback if you cache user (may not include followers/following)
         try {
           const ls = JSON.parse(localStorage.getItem('user') || 'null');
           if (ls?._id) {
@@ -45,14 +65,13 @@ export default function Home({ onLogout }) {
 
   async function bootstrap(meOrId) {
     const me = typeof meOrId === 'string' ? null : meOrId;
-    const userId = typeof meOrId === 'string' ? meOrId : meOrId?._id;
-    if (!userId) return;
+    const meId = typeof meOrId === 'string' ? meOrId : meOrId?._id;
+    if (!meId) return;
 
     try {
-      // We do NOT trust /friends to determine "friend" UI — compute it ourselves as mutual follows.
       const [usersRes, incomingRes, feedRes, meRes] = await Promise.all([
         api.get('/users'),
-        api.get(`/users/${userId}/friend-requests`), // incoming (they followed me)
+        api.get(`/users/${meId}/friend-requests`), // incoming
         api.get('/posts/feed', { params: { limit: 50 } }),
         me ? Promise.resolve({ data: me }) : api.get('/users/me'),
       ]);
@@ -63,37 +82,33 @@ export default function Home({ onLogout }) {
       const feed         = feedRes?.data || {};
 
       setUsers(allUsers);
-      setCurrentUser(meFull); // ensure we have followers/following
+      setCurrentUser(meFull);
       setFriendRequests(incomingList);
 
-      // ---------- Compute mutual friends from /me ----------
-      const followersIds = new Set(arr(meFull.followers).map((x) => s(x?._id ?? x)));
-      const followingIds = new Set(arr(meFull.following).map((x) => s(x?._id ?? x)));
+      // --- compute mutual friends / outgoing ---
+      const followersIds = new Set(arr(meFull.followers).map(idOf));
+      const followingIds = new Set(arr(meFull.following).map(idOf));
       const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
 
-      // Build friend objects from allUsers (fall back to id-only if needed)
       const usersById = new Map(allUsers.map((u) => [s(u._id), u]));
       const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
-
       setFriends(friendsComputed);
 
-      // Outgoing pending = following − mutual − incoming
       const incomingIds = new Set(incomingList.map((r) => s(r._id)));
-      const outgoing = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
+      const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
       setOutgoingRequests(outgoing);
 
-      // Posts: only from mutual friends
+      // --- posts: friends ∪ me ---
       const friendIdSet = new Set([...mutualIds]);
-      const onlyFriends = arr(feed.items).filter((p) =>
-        friendIdSet.has(s(p.author?._id || p.author))
-      );
-      setPosts(onlyFriends);
+      const visible = filterFeedToFriendsAndMe(arr(feed.items), friendIdSet, meFull._id)
+        .map((p) => normalizeAuthor(p, meFull, usersById));
+      setPosts(visible);
     } catch (err) {
       console.error('Bootstrap load error:', err?.response?.data || err);
     }
   }
 
-  // Central refresher to recompute all social states after any change
+  // Central refresher
   const refreshSocialState = async () => {
     if (!currentUser?._id) return;
     try {
@@ -104,15 +119,16 @@ export default function Home({ onLogout }) {
         api.get('/posts/feed', { params: { limit: 50 } }),
       ]);
 
-      setCurrentUser(meNew);
-
       const allUsers     = arr(usersRes.data);
       const incomingList = arr(incomingRes.data);
+      const feed         = feedRes?.data || {};
+
+      setCurrentUser(meNew);
       setUsers(allUsers);
       setFriendRequests(incomingList);
 
-      const followersIds = new Set(arr(meNew.followers).map((x) => s(x?._id ?? x)));
-      const followingIds = new Set(arr(meNew.following).map((x) => s(x?._id ?? x)));
+      const followersIds = new Set(arr(meNew.followers).map(idOf));
+      const followingIds = new Set(arr(meNew.following).map(idOf));
       const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
 
       const usersById    = new Map(allUsers.map((u) => [s(u._id), u]));
@@ -123,63 +139,35 @@ export default function Home({ onLogout }) {
       const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
       setOutgoingRequests(outgoing);
 
-      const feed = feedRes?.data || {};
       const friendIdSet = new Set([...mutualIds]);
-      const onlyFriends = arr(feed.items).filter((p) =>
-        friendIdSet.has(s(p.author?._id || p.author))
-      );
-      setPosts(onlyFriends);
+      const visible = filterFeedToFriendsAndMe(arr(feed.items), friendIdSet, meNew._id)
+        .map((p) => normalizeAuthor(p, meNew, usersById));
+      setPosts(visible);
     } catch (e) {
       console.error('Refresh state error:', e?.response?.data || e);
     }
   };
 
-  // ----- Actions -----
-
-  // Accept incoming (follow back -> becomes mutual friend)
+  // ---------- Actions ----------
   const acceptRequest = async (senderId) => {
-    try {
-      await api.post(`/users/${senderId}/follow`);
-      await refreshSocialState();
-    } catch (e) {
-      console.error('Accept request error:', e?.response?.data || e);
-      alert(e?.response?.data?.message || 'Could not accept request');
-    }
+    try { await api.post(`/users/${senderId}/follow`); await refreshSocialState(); }
+    catch (e) { console.error('Accept request error:', e?.response?.data || e); alert(e?.response?.data?.message || 'Could not accept request'); }
   };
 
-  // Send request (follow)
   const sendFriendRequest = async (targetId) => {
-    try {
-      await api.post(`/users/${targetId}/follow`);
-      await refreshSocialState();
-    } catch (e) {
-      console.error('Send request error:', e?.response?.data || e);
-      alert(e?.response?.data?.message || 'Could not send request');
-    }
+    try { await api.post(`/users/${targetId}/follow`); await refreshSocialState(); }
+    catch (e) { console.error('Send request error:', e?.response?.data || e); alert(e?.response?.data?.message || 'Could not send request'); }
   };
 
-  // Cancel outgoing request (unfollow)
   const cancelFriendRequest = async (targetId) => {
-    const ok = window.confirm('Cancel friend request?');
-    if (!ok) return;
-    try {
-      await api.post(`/users/${targetId}/unfollow`);
-      await refreshSocialState();
-    } catch (e) {
-      console.error('Cancel request error:', e?.response?.data || e);
-      alert(e?.response?.data?.message || 'Could not cancel request');
-    }
+    if (!window.confirm('Cancel friend request?')) return;
+    try { await api.post(`/users/${targetId}/unfollow`); await refreshSocialState(); }
+    catch (e) { console.error('Cancel request error:', e?.response?.data || e); alert(e?.response?.data?.message || 'Could not cancel request'); }
   };
 
-  // Remove an existing friend (we unfollow; if they still follow us, they’ll show as “Accept”)
   const removeFriend = async (friendId) => {
-    try {
-      await api.post(`/users/${friendId}/unfollow`);
-      await refreshSocialState();
-    } catch (e) {
-      console.error('Remove friend error:', e?.response?.data || e);
-      alert(e?.response?.data?.message || 'Could not remove friend');
-    }
+    try { await api.post(`/users/${friendId}/unfollow`); await refreshSocialState(); }
+    catch (e) { console.error('Remove friend error:', e?.response?.data || e); alert(e?.response?.data?.message || 'Could not remove friend'); }
   };
 
   const handleImageChange = (e) => {
@@ -193,23 +181,25 @@ export default function Home({ onLogout }) {
     const payload = { text: newPost, imageUrl: preview || '' };
     try {
       const { data } = await api.post('/posts', payload);
+
+      // Normalize returned post so author is my name immediately
+      const usersById = new Map(users.map((u) => [s(u._id), u]));
+      const normalized = normalizeAuthor(data, currentUser, usersById);
+
       setNewPost(''); setPreview(null);
-      setPosts((prev) => [data, ...prev]);
-    } catch (e) {
-      console.error('Create post error:', e?.response?.data || e);
-      alert(e?.response?.data?.message || 'Could not create post');
+      setPosts((prev) => [normalized, ...prev]);
+    } catch (e2) {
+      console.error('Create post error:', e2?.response?.data || e2);
+      alert(e2?.response?.data?.message || 'Could not create post');
     }
   };
 
-  // ----- Rendering helpers -----
+  // ---------- Rendering helpers ----------
   const friendIdSet   = new Set(friends.map((f) => s(f._id)));
   const incomingIdSet = new Set(friendRequests.map((r) => s(r._id)));
   const outgoingIdSet = new Set(outgoingRequests.map(s));
 
-  // close any open popover when navigating list
-  useEffect(() => {
-    setFriendMenuFor(null);
-  }, [users.length, friends.length, friendRequests.length, outgoingRequests.length]);
+  useEffect(() => { setFriendMenuFor(null); }, [users.length, friends.length, friendRequests.length, outgoingRequests.length]);
 
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
@@ -255,16 +245,21 @@ export default function Home({ onLogout }) {
             <button type="submit" className="bg-[#d4e7ba] px-4 py-2 rounded font-semibold text-sm">Post</button>
           </form>
 
-          <h2 className="text-xl font-semibold">Posts from Friends</h2>
+          {/* Header text changed here */}
+          <h2 className="text-xl font-semibold">Posts</h2>
+
           {posts.length === 0 ? (
             <p className="text-gray-500">No posts yet.</p>
           ) : (
             posts.map((post) => {
-              const authorName = s(post?.author?.name || post?.name);
-              const text = s(post?.text || post?.message);
+              const authorId = s(post?.author?._id || post?.author);
+              let authorName = s(post?.author?.name || post?.name || '');
+              if (!authorName && authorId === s(currentUser?._id)) authorName = s(currentUser?.name);
+
+              const text  = s(post?.text || post?.message);
               const image = s(post?.imageUrl || post?.image);
               return (
-                <div key={post._id} className="bg-white p-4 rounded-lg shadow space-y-2">
+                <div key={post._id || `${authorId}-${post.createdAt || Math.random()}`} className="bg-white p-4 rounded-lg shadow space-y-2">
                   <h3 className="font-semibold">{authorName || 'Unknown'}</h3>
                   <p className="text-sm">{text}</p>
                   {image ? (
@@ -319,9 +314,13 @@ export default function Home({ onLogout }) {
                 .filter((u) => u._id !== (currentUser?._id || ''))
                 .map((user) => {
                   const id = s(user._id);
-                  const isFriend   = friendIdSet.has(id);     // mutual follows only
-                  const isIncoming = incomingIdSet.has(id);   // they followed me
-                  const isOutgoing = outgoingIdSet.has(id);   // I followed them (pending)
+                  const friendIds = new Set(friends.map((f) => s(f._id)));
+                  const incomingIdSet = new Set(friendRequests.map((r) => s(r._id)));
+                  const outgoingIdSet = new Set(outgoingRequests.map(s));
+
+                  const isFriend   = friendIds.has(id);
+                  const isIncoming = incomingIdSet.has(id);
+                  const isOutgoing = outgoingIdSet.has(id);
 
                   return (
                     <li key={id} className="flex items-center gap-3 relative">
@@ -395,7 +394,7 @@ export default function Home({ onLogout }) {
             </ul>
           </div>
 
-          {/* Friends List (same remove popover via trailing button) */}
+          {/* Friends List with the same Friend ▾ menu */}
           <div className="bg-[#e6f7ff] p-4 rounded-xl shadow">
             <h3 className="text-lg font-semibold mb-3">Your Friends</h3>
             {arr(friends).length === 0 ? (
