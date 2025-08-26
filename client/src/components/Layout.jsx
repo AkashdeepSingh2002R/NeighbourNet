@@ -7,7 +7,7 @@ export default function Layout({ onLogout }) {
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235] flex flex-col">
       <Navbar onLogout={onLogout} />
-      <main className="flex-1">
+      <main className="flex-1 overflow">
         <Outlet />
       </main>
       <Footer />

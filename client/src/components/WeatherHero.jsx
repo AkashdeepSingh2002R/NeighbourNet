@@ -1,91 +1,149 @@
 import React, { useEffect, useState } from 'react';
-import api from '../api/axios'; // ✅ used only for the /users/me fallback
+import api from '../api/axios'; // optional (for greeting); safe to keep
 
-export default function WeatherHero({ onThemeChange }) {
-  const [user, setUser] = useState(null);
+export default function WeatherHero({ onThemeChange /*, city (ignored) */ }) {
+  const [user, setUser] = useState(null);          // greeting only
   const [weather, setWeather] = useState(null);
+  const [place, setPlace] = useState('');          // e.g., "Brampton, Ontario, Canada"
+  const [err, setErr] = useState('');
+  const [queryUsed, setQueryUsed] = useState('');  // debug
 
-  const API_KEY = 'd2f197eb7d1d4b73aee04612250605'; // ✅ your key
+  const API_KEY = 'd2f197eb7d1d4b73aee04612250605';
 
+  // Load a user for greeting (does NOT block weather)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // try localStorage first
+      try {
+        const ls = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!cancelled && ls) setUser(ls);
+      } catch {}
+      // backend fallback
+      if (!user) {
+        try {
+          const { data } = await api.get('/users/me');
+          if (!cancelled && data) setUser(data);
+        } catch {}
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // On first render: geolocate → fallback to IP
   useEffect(() => {
     let cancelled = false;
 
-    const boot = async () => {
-      // 1) Try localStorage (your original flow)
-      let stored = null;
-      try {
-        stored = JSON.parse(localStorage.getItem('user') || 'null');
-      } catch {}
+    const locateAndFetch = async () => {
+      setErr('');
+      const fetchByIP = async () => {
+        const q = 'auto:ip';
+        if (cancelled) return;
+        setQueryUsed(q);
+        await fetchWeather(q);
+      };
 
-      if (stored?.city) {
-        if (!cancelled) {
-          setUser(stored);
-          fetchWeather(stored.city);
+      if ('geolocation' in navigator) {
+        const getPos = () =>
+          new Promise((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(
+              resolve,
+              reject,
+              { enableHighAccuracy: true, timeout: 7000, maximumAge: 60000 }
+            )
+          );
+        try {
+          const pos = await getPos();
+          if (cancelled) return;
+          const q = `${pos.coords.latitude},${pos.coords.longitude}`;
+          setQueryUsed(q);
+          await fetchWeather(q);
+          return;
+        } catch {
+          await fetchByIP();
+          return;
         }
-        return;
       }
-
-      // 2) Fallback: ask backend for full profile (adds city/postal if missing)
-      try {
-        const { data } = await api.get('/users/me');
-        if (!cancelled && data) {
-          try { localStorage.setItem('user', JSON.stringify(data)); } catch {}
-          setUser(data);
-          if (data.city) fetchWeather(data.city);
-        }
-      } catch {
-        // silently ignore — component will render nothing (same as your original)
-      }
+      await fetchByIP();
     };
 
-    boot();
+    locateAndFetch();
     return () => { cancelled = true; };
-  }, []); // run once like before
+  }, []);
 
-  const fetchWeather = async (city) => {
-    if (!city) return;
+  const fetchWeather = async (q) => {
     try {
       const res = await fetch(
-        `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${encodeURIComponent(city)}`
+        `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${encodeURIComponent(q)}&aqi=no`,
+        { cache: 'no-store' }
       );
       const data = await res.json();
 
-      if (data && data.current) {
-        setWeather(data);
-        onThemeChange?.(data.current.condition.text);
-      } else {
-        console.error('Invalid weather data:', data);
+      if (data?.error) {
+        setWeather(null);
+        setPlace('');
+        setErr(data.error.message || 'Weather service error');
+        return;
       }
-    } catch (error) {
-      console.log('Weather fetch failed', error);
+      if (!data?.current) {
+        setWeather(null);
+        setPlace('');
+        setErr('Invalid weather data');
+        return;
+      }
+
+      setErr('');
+      setWeather(data);
+      setPlace(
+        [data?.location?.name, data?.location?.region, data?.location?.country]
+          .filter(Boolean)
+          .join(', ')
+      );
+      onThemeChange?.(data.current.condition.text);
+    } catch {
+      setErr('Network error while fetching weather');
+      setWeather(null);
+      setPlace('');
     }
   };
-
-  // Keep original behavior: render nothing if we have no user yet
-  if (!user) return null;
 
   return (
     <section className="bg-white/90 shadow rounded-xl p-6 mx-4 my-6 md:mx-12">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#2f4430]">
-            Welcome back, {user.name}
+            Welcome back{user?.name ? `, ${user.name}` : ''}
           </h1>
           <p className="text-[#4b5e4a] text-sm mt-1">
-            Location: {user.city || '—'}, {user.postalCode || '—'}
+            {place || (err ? '—' : 'Detecting your location…')}
           </p>
+          {err && <p className="text-xs text-red-600 mt-1">{err}</p>}
+          
         </div>
 
         {weather?.current ? (
           <div className="flex items-center gap-4">
-            <img src={weather.current.condition.icon} alt="icon" className="w-10 h-10" />
+            <img
+              src={
+                weather.current.condition.icon?.startsWith('//')
+                  ? `https:${weather.current.condition.icon}`
+                  : weather.current.condition.icon
+              }
+              alt="icon"
+              className="w-10 h-10"
+            />
             <div>
-              <p className="text-[#3a5942] font-medium">{weather.current.condition.text}</p>
-              <p className="text-[#5f705e] text-sm">{weather.current.temp_c}°C</p>
+              <p className="text-[#3a5942] font-medium">
+                {weather.current.condition.text}
+              </p>
+              <p className="text-[#5f705e] text-sm">
+                {weather.current.temp_c}°C
+              </p>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">Weather data unavailable</p>
+          !err && <p className="text-sm text-gray-500">Weather data unavailable</p>
         )}
       </div>
     </section>

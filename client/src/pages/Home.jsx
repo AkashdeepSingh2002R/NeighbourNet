@@ -1,3 +1,4 @@
+// client/src/pages/Home.jsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
@@ -8,92 +9,176 @@ import ActionTiles from '../components/ActionTiles';
 export default function Home({ onLogout }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [posts, setPosts] = useState([]);
-  const [friends, setFriends] = useState([]);
-  const [friendRequests, setFriendRequests] = useState([]);
   const [users, setUsers] = useState([]);
-  const [sentRequests, setSentRequests] = useState([]);
+
+  const [friends, setFriends] = useState([]);                 // computed: mutual follows (NOT backend /friends)
+  const [friendRequests, setFriendRequests] = useState([]);   // incoming requests (they follow me)
+  const [outgoingRequests, setOutgoingRequests] = useState([]); // following − friends − incoming
+
   const [newPost, setNewPost] = useState('');
   const [preview, setPreview] = useState(null);
+
+  const [friendMenuFor, setFriendMenuFor] = useState(null);   // which friend's popover is open
 
   const s = (v) => (v ?? '').toString();
   const arr = (v) => (Array.isArray(v) ? v : []);
 
   useEffect(() => {
-    // Try cookie auth /me, else fallback to localStorage user
+    // Load session user (cookie/JWT) and bootstrap lists
     api.get('/users/me')
       .then(({ data }) => {
         setCurrentUser(data);
-        bootstrap(data?._id);
+        bootstrap(data); // pass full /me (has followers/following)
       })
       .catch(() => {
+        // Fallback if you cache user (may not include followers/following)
         try {
           const ls = JSON.parse(localStorage.getItem('user') || 'null');
           if (ls?._id) {
             setCurrentUser(ls);
-            bootstrap(ls._id);
+            bootstrap(ls);
           }
         } catch {}
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function bootstrap(userId) {
+  async function bootstrap(meOrId) {
+    const me = typeof meOrId === 'string' ? null : meOrId;
+    const userId = typeof meOrId === 'string' ? meOrId : meOrId?._id;
     if (!userId) return;
-    try {
-      const [friendsRes, requestsRes, usersRes] = await Promise.all([
-        api.get(`/users/${userId}/friends`),
-        api.get(`/users/${userId}/friend-requests`),
-        api.get('/users'),
-      ]);
-      const friendList = arr(friendsRes.data);
-      setFriends(friendList);
-      setFriendRequests(arr(requestsRes.data));
-      setUsers(arr(usersRes.data));
 
-      const { data: feed } = await api.get('/posts/feed', { params: { limit: 50 } });
-      const friendIds = new Set(friendList.map((f) => s(f._id)));
-      const onlyFriends = arr(feed.items).filter((p) => friendIds.has(s(p.author?._id || p.author)));
+    try {
+      // We do NOT trust /friends to determine "friend" UI — compute it ourselves as mutual follows.
+      const [usersRes, incomingRes, feedRes, meRes] = await Promise.all([
+        api.get('/users'),
+        api.get(`/users/${userId}/friend-requests`), // incoming (they followed me)
+        api.get('/posts/feed', { params: { limit: 50 } }),
+        me ? Promise.resolve({ data: me }) : api.get('/users/me'),
+      ]);
+
+      const allUsers     = arr(usersRes.data);
+      const incomingList = arr(incomingRes.data);
+      const meFull       = meRes.data || {};
+      const feed         = feedRes?.data || {};
+
+      setUsers(allUsers);
+      setCurrentUser(meFull); // ensure we have followers/following
+      setFriendRequests(incomingList);
+
+      // ---------- Compute mutual friends from /me ----------
+      const followersIds = new Set(arr(meFull.followers).map((x) => s(x?._id ?? x)));
+      const followingIds = new Set(arr(meFull.following).map((x) => s(x?._id ?? x)));
+      const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
+
+      // Build friend objects from allUsers (fall back to id-only if needed)
+      const usersById = new Map(allUsers.map((u) => [s(u._id), u]));
+      const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
+
+      setFriends(friendsComputed);
+
+      // Outgoing pending = following − mutual − incoming
+      const incomingIds = new Set(incomingList.map((r) => s(r._id)));
+      const outgoing = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
+      setOutgoingRequests(outgoing);
+
+      // Posts: only from mutual friends
+      const friendIdSet = new Set([...mutualIds]);
+      const onlyFriends = arr(feed.items).filter((p) =>
+        friendIdSet.has(s(p.author?._id || p.author))
+      );
       setPosts(onlyFriends);
     } catch (err) {
       console.error('Bootstrap load error:', err?.response?.data || err);
     }
   }
 
+  // Central refresher to recompute all social states after any change
+  const refreshSocialState = async () => {
+    if (!currentUser?._id) return;
+    try {
+      const [{ data: meNew }, usersRes, incomingRes, feedRes] = await Promise.all([
+        api.get('/users/me'),
+        api.get('/users'),
+        api.get(`/users/${currentUser._id}/friend-requests`),
+        api.get('/posts/feed', { params: { limit: 50 } }),
+      ]);
+
+      setCurrentUser(meNew);
+
+      const allUsers     = arr(usersRes.data);
+      const incomingList = arr(incomingRes.data);
+      setUsers(allUsers);
+      setFriendRequests(incomingList);
+
+      const followersIds = new Set(arr(meNew.followers).map((x) => s(x?._id ?? x)));
+      const followingIds = new Set(arr(meNew.following).map((x) => s(x?._id ?? x)));
+      const mutualIds    = new Set([...followingIds].filter((id) => followersIds.has(id)));
+
+      const usersById    = new Map(allUsers.map((u) => [s(u._id), u]));
+      const friendsComputed = [...mutualIds].map((id) => usersById.get(id) || { _id: id, name: 'Friend' });
+      setFriends(friendsComputed);
+
+      const incomingIds = new Set(incomingList.map((r) => s(r._id)));
+      const outgoing    = [...followingIds].filter((id) => !mutualIds.has(id) && !incomingIds.has(id));
+      setOutgoingRequests(outgoing);
+
+      const feed = feedRes?.data || {};
+      const friendIdSet = new Set([...mutualIds]);
+      const onlyFriends = arr(feed.items).filter((p) =>
+        friendIdSet.has(s(p.author?._id || p.author))
+      );
+      setPosts(onlyFriends);
+    } catch (e) {
+      console.error('Refresh state error:', e?.response?.data || e);
+    }
+  };
+
+  // ----- Actions -----
+
+  // Accept incoming (follow back -> becomes mutual friend)
   const acceptRequest = async (senderId) => {
     try {
       await api.post(`/users/${senderId}/follow`);
-      if (!currentUser?._id) return;
-      const [friendsRes, reqRes] = await Promise.all([
-        api.get(`/users/${currentUser._id}/friends`),
-        api.get(`/users/${currentUser._id}/friend-requests`),
-      ]);
-        setFriends(arr(friendsRes.data));
-        setFriendRequests(arr(reqRes.data));
+      await refreshSocialState();
     } catch (e) {
       console.error('Accept request error:', e?.response?.data || e);
       alert(e?.response?.data?.message || 'Could not accept request');
     }
   };
 
+  // Send request (follow)
   const sendFriendRequest = async (targetId) => {
     try {
       await api.post(`/users/${targetId}/follow`);
-      setSentRequests((prev) => [...prev, targetId]);
+      await refreshSocialState();
     } catch (e) {
       console.error('Send request error:', e?.response?.data || e);
       alert(e?.response?.data?.message || 'Could not send request');
     }
   };
 
+  // Cancel outgoing request (unfollow)
   const cancelFriendRequest = async (targetId) => {
     const ok = window.confirm('Cancel friend request?');
     if (!ok) return;
     try {
       await api.post(`/users/${targetId}/unfollow`);
-      setSentRequests((prev) => prev.filter((id) => id !== targetId));
+      await refreshSocialState();
     } catch (e) {
       console.error('Cancel request error:', e?.response?.data || e);
       alert(e?.response?.data?.message || 'Could not cancel request');
+    }
+  };
+
+  // Remove an existing friend (we unfollow; if they still follow us, they’ll show as “Accept”)
+  const removeFriend = async (friendId) => {
+    try {
+      await api.post(`/users/${friendId}/unfollow`);
+      await refreshSocialState();
+    } catch (e) {
+      console.error('Remove friend error:', e?.response?.data || e);
+      alert(e?.response?.data?.message || 'Could not remove friend');
     }
   };
 
@@ -116,7 +201,15 @@ export default function Home({ onLogout }) {
     }
   };
 
-  const confirmedFriendIds = friends.map((f) => f._id);
+  // ----- Rendering helpers -----
+  const friendIdSet   = new Set(friends.map((f) => s(f._id)));
+  const incomingIdSet = new Set(friendRequests.map((r) => s(r._id)));
+  const outgoingIdSet = new Set(outgoingRequests.map(s));
+
+  // close any open popover when navigating list
+  useEffect(() => {
+    setFriendMenuFor(null);
+  }, [users.length, friends.length, friendRequests.length, outgoingRequests.length]);
 
   return (
     <div className="min-h-screen bg-[#f1f3ec] text-[#2f4235]">
@@ -124,7 +217,7 @@ export default function Home({ onLogout }) {
       {/* Weather hero at the top */}
       <section className="max-w-6xl mx-auto px-6 pt-8">
         <WeatherHero city={currentUser?.city} />
-        {/* Keep the main buttons under the hero */}
+        {/* Main buttons under the hero */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           <Link to="/profile" className="bg-[#e8f4e1] hover:opacity-90 transition rounded-lg p-3 text-center font-medium">
             Profile
@@ -141,7 +234,7 @@ export default function Home({ onLogout }) {
         </div>
       </section>
 
-      {/* Optional: keep your existing action tiles row */}
+      {/* Action tiles row */}
       <section className="max-w-6xl mx-auto px-6 mt-6">
         <ActionTiles />
       </section>
@@ -190,7 +283,7 @@ export default function Home({ onLogout }) {
 
         {/* Sidebar */}
         <aside className="w-full md:w-[300px] space-y-6">
-          {/* Friend Requests */}
+          {/* Friend Requests (incoming) */}
           <div className="bg-[#fff8dc] p-4 rounded-xl shadow">
             <h3 className="text-lg font-semibold mb-3">Friend Requests</h3>
             {arr(friendRequests).length === 0 ? (
@@ -206,7 +299,10 @@ export default function Home({ onLogout }) {
                       <p className="font-medium">{s(req?.name)}</p>
                       <p className="text-xs text-gray-600">{s(req?.city)}</p>
                     </div>
-                    <button onClick={() => acceptRequest(req._id)} className="text-xs bg-green-200 px-2 py-1 rounded">
+                    <button
+                      onClick={() => acceptRequest(req._id)}
+                      className="text-xs bg-green-200 px-2 py-1 rounded"
+                    >
                       Accept
                     </button>
                   </li>
@@ -222,9 +318,13 @@ export default function Home({ onLogout }) {
               {arr(users)
                 .filter((u) => u._id !== (currentUser?._id || ''))
                 .map((user) => {
-                  const requested = sentRequests.includes(user._id);
+                  const id = s(user._id);
+                  const isFriend   = friendIdSet.has(id);     // mutual follows only
+                  const isIncoming = incomingIdSet.has(id);   // they followed me
+                  const isOutgoing = outgoingIdSet.has(id);   // I followed them (pending)
+
                   return (
-                    <li key={user._id} className="flex items-center gap-3">
+                    <li key={id} className="flex items-center gap-3 relative">
                       <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center font-bold text-[#2f4235]">
                         {s(user?.name)[0] || '?'}
                       </div>
@@ -232,12 +332,60 @@ export default function Home({ onLogout }) {
                         <p className="font-medium">{s(user?.name)}</p>
                         <p className="text-xs text-gray-600">{s(user?.city)}</p>
                       </div>
-                      {requested ? (
-                        <button className="text-xs bg-gray-300 px-3 py-1 rounded" onClick={() => cancelFriendRequest(user._id)}>
+
+                      {isFriend ? (
+                        <div className="relative">
+                          <button
+                            className="text-xs bg-gray-300 px-3 py-1 rounded"
+                            onClick={() => setFriendMenuFor(friendMenuFor === id ? null : id)}
+                            aria-haspopup="menu"
+                            aria-expanded={friendMenuFor === id}
+                          >
+                            Friend ▾
+                          </button>
+                          {friendMenuFor === id && (
+                            <div
+                              className="absolute right-0 z-10 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg"
+                              role="menu"
+                              onMouseLeave={() => setFriendMenuFor(null)}
+                            >
+                              <button
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600"
+                                onClick={() => { setFriendMenuFor(null); removeFriend(id); }}
+                                role="menuitem"
+                              >
+                                Remove friend
+                              </button>
+                              <button
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                                onClick={() => setFriendMenuFor(null)}
+                                role="menuitem"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : isIncoming ? (
+                        <button
+                          className="text-xs bg-green-200 px-3 py-1 rounded"
+                          onClick={() => acceptRequest(id)}
+                        >
+                          Accept
+                        </button>
+                      ) : isOutgoing ? (
+                        <button
+                          className="text-xs bg-gray-300 px-3 py-1 rounded"
+                          onClick={() => cancelFriendRequest(id)}
+                          title="Cancel friend request"
+                        >
                           Requested
                         </button>
                       ) : (
-                        <button onClick={() => sendFriendRequest(user._id)} className="text-xs bg-yellow-200 px-3 py-1 rounded">
+                        <button
+                          onClick={() => sendFriendRequest(id)}
+                          className="text-xs bg-yellow-200 px-3 py-1 rounded"
+                        >
                           Add Friend
                         </button>
                       )}
@@ -247,24 +395,59 @@ export default function Home({ onLogout }) {
             </ul>
           </div>
 
-          {/* Friends List */}
+          {/* Friends List (same remove popover via trailing button) */}
           <div className="bg-[#e6f7ff] p-4 rounded-xl shadow">
             <h3 className="text-lg font-semibold mb-3">Your Friends</h3>
             {arr(friends).length === 0 ? (
               <p className="text-sm text-gray-500">You haven't added any friends yet</p>
             ) : (
               <ul className="space-y-4">
-                {arr(friends).map((friend) => (
-                  <li key={friend._id} className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-[#2f4235]">
-                      {s(friend?.name)[0] || '?'}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">{s(friend?.name)}</p>
-                      <p className="text-xs text-gray-600">{s(friend?.city)}</p>
-                    </div>
-                  </li>
-                ))}
+                {arr(friends).map((friend) => {
+                  const id = s(friend._id);
+                  return (
+                    <li key={id} className="flex items-center gap-3 relative">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-[#2f4235]">
+                        {s(friend?.name)[0] || '?'}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{s(friend?.name)}</p>
+                        <p className="text-xs text-gray-600">{s(friend?.city)}</p>
+                      </div>
+                      <div className="relative">
+                        <button
+                          className="text-xs bg-gray-300 px-3 py-1 rounded"
+                          onClick={() => setFriendMenuFor(friendMenuFor === id ? null : id)}
+                          aria-haspopup="menu"
+                          aria-expanded={friendMenuFor === id}
+                        >
+                          Friend ▾
+                        </button>
+                        {friendMenuFor === id && (
+                          <div
+                            className="absolute right-0 z-10 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg"
+                            role="menu"
+                            onMouseLeave={() => setFriendMenuFor(null)}
+                          >
+                            <button
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600"
+                              onClick={() => { setFriendMenuFor(null); removeFriend(id); }}
+                              role="menuitem"
+                            >
+                              Remove friend
+                            </button>
+                            <button
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                              onClick={() => setFriendMenuFor(null)}
+                              role="menuitem"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

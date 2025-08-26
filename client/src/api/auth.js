@@ -2,8 +2,7 @@
 import api, { setAuth } from './axios';
 
 export async function logout() {
-  try {
-    await api.post('/users/logout');
-  } catch {}
+  try { await api.post('/users/logout'); } catch {}
   setAuth(null);
+  try { localStorage.removeItem('user'); } catch {}
 }

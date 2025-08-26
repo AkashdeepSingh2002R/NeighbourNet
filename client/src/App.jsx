@@ -1,5 +1,7 @@
+// client/src/App.jsx
 import React, { useEffect, useState } from "react";
 import { Navigate, createBrowserRouter, RouterProvider } from "react-router-dom";
+import api from "./api/axios";
 
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -17,91 +19,90 @@ import Messages from "./pages/Messages";
 import Notifications from "./pages/Notifications";
 
 export default function App() {
-  const [user, setUser] = useState(null);
-
-  // bootstrap user from localStorage
-  useEffect(() => {
+  // 1) Synchronously hydrate from localStorage so first render already has the user (if stored)
+  const [user, setUser] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("user") || "null");
-      if (saved?._id) setUser(saved);
-    } catch {}
+      return saved?._id ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // 2) While we confirm with backend, keep boot=true so guards don't redirect
+  const [boot, setBoot] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // If you use cookie sessions, this confirms the session on refresh.
+        // If you use JWT, the axios interceptor (Authorization header) will be sent too.
+        const { data } = await api.get("/users/me");
+        if (!cancelled && data?._id) {
+          setUser(data);
+          try { localStorage.setItem("user", JSON.stringify(data)); } catch {}
+        }
+      } catch {
+        // If /me fails, keep whatever we had from localStorage. You can force logout here if you want.
+      } finally {
+        if (!cancelled) setBoot(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const handleLogout = () => {
-    try {
-      localStorage.removeItem("user");
-    } catch {}
+    try { localStorage.removeItem("user"); localStorage.removeItem("token"); } catch {}
     setUser(null);
   };
 
   // router
   const router = createBrowserRouter([
-    // welcome/login page WITHOUT Layout (so no navbar)
-    {
-      path: "/welcome",
-      element: <LandingLogin onLogin={setUser} />,
-    },
+    { path: "/welcome", element: <LandingLogin onLogin={(u) => {
+        setUser(u);
+        try { localStorage.setItem("user", JSON.stringify(u)); } catch {}
+      }} /> },
 
-    // everything else uses Layout (navbar + footer)
     {
       path: "/",
       element: <Layout onLogout={handleLogout} />,
       children: [
-        // redirect root based on auth
-        { index: true, element: user ? <Navigate to="/home" replace /> : <Navigate to="/welcome" replace /> },
+        // Redirect root only AFTER boot; otherwise you may bounce to /welcome prematurely
+        {
+          index: true,
+          element: boot
+            ? <div className="min-h-[40vh] flex items-center justify-center text-gray-600">Restoring session…</div>
+            : (user ? <Navigate to="/home" replace /> : <Navigate to="/welcome" replace />)
+        },
 
-        { path: "home", element: (
-            <ProtectedRoute user={user}>
-              <Home />
-            </ProtectedRoute>
-          ) },
-
-        { path: "communities", element: (
-            <ProtectedRoute user={user}>
-              <Communities />
-            </ProtectedRoute>
-          ) },
-
-        { path: "weather", element: (
-            <ProtectedRoute user={user}>
-              <WeatherPage />
-            </ProtectedRoute>
-          ) },
-
-        { path: "rentals", element: (
-            <ProtectedRoute user={user}>
-              <Rentals />
-            </ProtectedRoute>
-          ) },
-        { path: "rentals/:id", element: (
-            <ProtectedRoute user={user}>
-              <RentalDetail />
-            </ProtectedRoute>
-          ) },
-
-        { path: "profile", element: (
-            <ProtectedRoute user={user}>
-              <Profile />
-            </ProtectedRoute>
-          ) },
-
-        { path: "explore", element: (
-            <ProtectedRoute user={user}>
-              <Explore />
-            </ProtectedRoute>
-          ) },
-
-        { path: "messages", element: (
-            <ProtectedRoute user={user}>
-              <Messages />
-            </ProtectedRoute>
-          ) },
-
-        { path: "notifications", element: (
-            <ProtectedRoute user={user}>
-              <Notifications />
-            </ProtectedRoute>
-          ) },
+        { path: "home", element:
+          <ProtectedRoute user={user} boot={boot}><Home /></ProtectedRoute>
+        },
+        { path: "communities", element:
+          <ProtectedRoute user={user} boot={boot}><Communities /></ProtectedRoute>
+        },
+        { path: "weather", element:
+          <ProtectedRoute user={user} boot={boot}><WeatherPage /></ProtectedRoute>
+        },
+        { path: "rentals", element:
+          <ProtectedRoute user={user} boot={boot}><Rentals /></ProtectedRoute>
+        },
+        { path: "rentals/:id", element:
+          <ProtectedRoute user={user} boot={boot}><RentalDetail /></ProtectedRoute>
+        },
+        { path: "profile", element:
+          <ProtectedRoute user={user} boot={boot}><Profile /></ProtectedRoute>
+        },
+        { path: "explore", element:
+          <ProtectedRoute user={user} boot={boot}><Explore /></ProtectedRoute>
+        },
+        { path: "messages", element:
+          <ProtectedRoute user={user} boot={boot}><Messages /></ProtectedRoute>
+        },
+        { path: "notifications", element:
+          <ProtectedRoute user={user} boot={boot}><Notifications /></ProtectedRoute>
+        },
       ],
     },
   ]);

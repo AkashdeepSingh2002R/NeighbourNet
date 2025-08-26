@@ -4,7 +4,7 @@ export default function WeatherHero({ onThemeChange }) {
   const [user, setUser] = useState(null);
   const [weather, setWeather] = useState(null);
 
-  const API_KEY = 'd2f197eb7d1d4b73aee04612250605'; // Replace with your valid key
+  const API_KEY = 'd2f197eb7d1d4b73aee04612250605'; 
 
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem('user'));
@@ -31,7 +31,7 @@ export default function WeatherHero({ onThemeChange }) {
 
   return (
     <section className="px-6 py-10 text-white bg-black/40">
-      <h1 className="text-3xl font-bold">Welcome back, {user.name}</h1>
+      <h1 className="text-3xl font-bold">Welcomew back, {user.name}</h1>
       <p className="text-sm mt-1">
         Connected to {user.city} — {user.postalCode}
       </p>
